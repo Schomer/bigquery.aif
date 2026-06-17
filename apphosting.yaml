@@ -41,3 +41,23 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: GOOGLE_PROJECT_ID
+    value: malloy-data
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: BQ_DATASET
+    value: ecomm
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: GOOGLE_GENERATIVE_AI_API_KEY
+    secret: google-generative-ai-api-key
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: GOOGLE_AI_API_KEY
+    secret: google-generative-ai-api-key
+    availability:
+      - BUILD
+      - RUNTIME
