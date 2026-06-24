@@ -157,15 +157,7 @@ export function DataTable({ result, onSendMessage }: Props) {
         </table>
       </div>
 
-      {/* Row count footer */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', fontSize: 11, color: 'var(--text-dim)' }}>
-        <span>
-          {filtered.length < rows.length
-            ? `${filtered.length} of ${rows.length} rows`
-            : `${rows.length} rows`}
-          {rows.length > 200 && ' (showing first 200)'}
-        </span>
-      </div>
+
     </div>
   );
 }

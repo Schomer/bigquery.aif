@@ -76,7 +76,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
         </div>
       </div>
 
-      {/* Primary artifact — onSendMessage threaded into every view */}
+      {/* Primary artifact -- onSendMessage threaded into every view */}
       <div style={{ padding: '0 20px 16px' }}>
         <Artifact
           envelope={envelope}
@@ -91,7 +91,6 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
             padding: '12px 16px',
             background: '#f5f3ff',
             border: '1px solid #ddd6fe',
-
             borderRadius: 8,
           }}>
             <div style={{
@@ -124,9 +123,49 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
           </div>
         )}
 
-        {/* Provenance: SQL toggle (inline, no border) */}
+        {/* Footer meta: row count + cost on same line */}
+        {(() => {
+          const d = envelope.primaryArtifact.data as Record<string, unknown> | undefined;
+          const rowCount = Array.isArray((d as { rows?: unknown })?.rows) ? (d as { rows: unknown[] }).rows.length : null;
+          const cost = envelope.provenance.cost;
+          if (!rowCount && !cost && !envelope.provenance.jobId) return null;
+          return (
+            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16, alignItems: 'center' }}>
+              {rowCount != null && <span>{rowCount} rows</span>}
+              {cost && (
+                <>
+                  <span>{formatBytes(cost.totalBytesProcessed)} processed</span>
+                  <span>Tier {cost.tier}</span>
+                  {envelope.provenance.freshness && <span>{envelope.provenance.freshness}</span>}
+                </>
+              )}
+              {envelope.provenance.jobId && envelope.provenance.project && (
+                <a
+                  href={`https://console.cloud.google.com/bigquery?project=${encodeURIComponent(envelope.provenance.project)}&j=bq:US:${encodeURIComponent(envelope.provenance.jobId)}&page=queryresults`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: '#4f7fff',
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    marginLeft: 'auto',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 13 }}>open_in_new</span>
+                  BigQuery
+                </a>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* SQL toggle */}
         {envelope.provenance.sql && (
-          <div style={{ marginTop: 10 }}>
+          <div style={{ marginTop: 6 }}>
             <details style={{ margin: 0 }}>
               <summary style={{
                 fontSize: 11,
@@ -150,43 +189,15 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
           </div>
         )}
 
-        {/* Cost / BigQuery link (inline) */}
-        {(envelope.provenance.cost || envelope.provenance.jobId) && (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16, alignItems: 'center', marginTop: 6 }}>
-            {envelope.provenance.cost && (
-              <>
-                <span>{formatBytes(envelope.provenance.cost.totalBytesProcessed)} processed</span>
-                <span>Tier {envelope.provenance.cost.tier}</span>
-                {envelope.provenance.freshness && <span>{envelope.provenance.freshness}</span>}
-              </>
-            )}
-            {envelope.provenance.jobId && envelope.provenance.project && (
-              <a
-                href={`https://console.cloud.google.com/bigquery?project=${encodeURIComponent(envelope.provenance.project)}&j=bq:US:${encodeURIComponent(envelope.provenance.jobId)}&page=queryresults`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  color: '#4f7fff',
-                  textDecoration: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  marginLeft: 'auto',
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>open_in_new</span>
-                BigQuery
-              </a>
-            )}
-          </div>
+        {/* Divider before suggestions */}
+        {!envelope.requiresConfirmation && (
+          <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 12 }} />
         )}
 
         {/* Next actions */}
         {!envelope.requiresConfirmation && envelope.nextActions.length > 0 && (
           <div style={{
-            marginTop: 12,
+            marginTop: 10,
             display: 'flex',
             gap: 8,
             flexWrap: 'wrap',
@@ -205,7 +216,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
 
         {/* Fallback: suggest next steps */}
         {!envelope.requiresConfirmation && envelope.nextActions.length === 0 && (
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 10 }}>
             <button
               className="chip"
               style={{ opacity: 0.7, fontSize: 11 }}
@@ -216,7 +227,6 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
           </div>
         )}
       </div>
-
 
     </div>
   );
@@ -294,7 +304,7 @@ function Artifact({
   }
 }
 
-// ─── Chart <-> Table toggle ─────────────────────────────────────────────────
+// --- Chart <-> Table toggle ---
 type ChartToggleType =
   | 'LINE_CHART' | 'BAR_CHART' | 'AREA_CHART' | 'SCATTER' | 'PIE_CHART'
   | 'DONUT_CHART' | 'COLUMN_CHART' | 'HISTOGRAM' | 'SPARKLINE'
@@ -344,7 +354,7 @@ function ChartWithToggle({
                 color: view === v ? '#fff' : 'var(--text-muted)',
               }}
             >
-              {v === 'chart' ? '▲ Chart' : '⊞ Table'}
+              {v === 'chart' ? '\u25B2 Chart' : '\u229E Table'}
             </button>
           ))}
         </div>
