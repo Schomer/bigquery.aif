@@ -934,10 +934,35 @@ details[open] > summary .provenance-arrow {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 8px 8px 8px 16px;
+}
+
+/* Mystic prompt input container - shared style for aura glow */
+.mystic-prompt-container {
+  background-image: linear-gradient(rgba(248, 249, 250, 0.85), rgba(248, 249, 250, 0.85)), 
+                    linear-gradient(135deg, var(--border) 0%, var(--border) 100%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  border: 1px solid transparent;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.mystic-prompt-container:hover {
+  background-image: linear-gradient(rgba(248, 249, 250, 0.9), rgba(248, 249, 250, 0.9)), 
+                    linear-gradient(135deg, #a5b4fc 0%, #c084fc 100%);
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.08);
+}
+
+.mystic-prompt-container:focus-within {
+  background-image: linear-gradient(rgba(248, 249, 250, 0.95), rgba(248, 249, 250, 0.95)), 
+                    linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #06b6d4 100%);
+  box-shadow: 
+    0 0 0 1px rgba(99, 102, 241, 0.1),
+    0 8px 32px rgba(99, 102, 241, 0.15),
+    0 2px 8px rgba(168, 85, 247, 0.1);
+  transform: translateY(-1px);
 }
 
 /* Results panel */

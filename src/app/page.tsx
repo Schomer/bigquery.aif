@@ -868,17 +868,14 @@ export default function Home() {
                 )}
 
               {/* Centered prompt field */}
-              <div style={{
+              <div className="mystic-prompt-container" style={{
                 width: '100%',
                 maxWidth: 640,
-                background: 'var(--surface-2)',
-                border: '1px solid var(--border)',
                 borderRadius: 999,
                 padding: '10px 10px 10px 20px',
                 display: 'flex',
                 alignItems: 'flex-end',
                 gap: 10,
-                boxShadow: '0 4px 32px rgba(0,0,0,0.10)',
               }}>
                 {inputTextarea(activeProject ? 'Ask about your data...' : 'Select a project first...')}
                 {sendButton}
@@ -1042,21 +1039,18 @@ export default function Home() {
 
           {/* -- Floating prompt bar (active chat only) -- */}
           {hasChat && (
-            <div style={{
+            <div className="mystic-prompt-container" style={{
               position: 'fixed',
               bottom: 28,
               left: '50%',
               transform: 'translateX(-50%)',
               marginLeft: 110,
               width: 'min(680px, calc(100vw - 268px))',
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
               borderRadius: 999,
               padding: '10px 10px 10px 20px',
               display: 'flex',
               alignItems: 'flex-end',
               gap: 10,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
               backdropFilter: 'blur(12px)',
               zIndex: 50,
             }}>
@@ -1255,7 +1249,7 @@ export default function Home() {
 
             {/* Input bar docked at bottom of sidebar */}
             <div className="chat-sidebar-input">
-              <div className="chat-sidebar-input-inner">
+              <div className="chat-sidebar-input-inner mystic-prompt-container">
                 {inputTextarea(activeProject ? 'Ask about your data...' : 'Select a project first...')}
                 {sendButton}
               </div>
