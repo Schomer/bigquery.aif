@@ -25,11 +25,12 @@ For Tier 3/4, set `requiresConfirmation: true` in your response and include the 
 
 ## SQL rules
 
-- Always use fully qualified table references: `project.dataset.table`
+- Always wrap fully qualified table references in literal backticks: `project.dataset.table` (e.g. `my-project.dataset.table`). This is CRITICAL if the project or dataset contains hyphens/dashes.
 - Use partition filters (`WHERE date_column BETWEEN ...`) when the table is partitioned — check Schema cache first
 - Use `LIMIT` for exploratory queries unless the user explicitly wants all rows
 - Never use `SELECT *` in production queries — enumerate columns
 - For joins: prefer explicit column lists, not `SELECT *`
+- If the user asks to create or make a new table with data/mock data, generate a `CREATE OR REPLACE TABLE ... AS SELECT ... UNION ALL SELECT ...` SQL query to populate the table with the requested data rows rather than leaving it empty.
 
 ## What you return
 

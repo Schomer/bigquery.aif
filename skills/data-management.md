@@ -89,6 +89,10 @@ If `rowsAffected` ≠ `rowsExpected` (mismatch): set `mismatch: true` and `misma
 - DDL completion: concise, factual — "Column `discount_code` added to `orders`"
 - Tone: NEUTRAL for all completion (even success) — calm design
 
+## Mock Data Generation
+
+- When asked to create or make a new table with data (where the user specifies the fields or data description but the source data doesn't exist in another table), you must generate a `CREATE OR REPLACE TABLE ... AS SELECT ... UNION ALL SELECT ...` SQL query to populate the table with realistic mock/sample data rows rather than leaving it empty.
+
 ## Schema cache invalidation
 
 After ANY successful DDL operation (ADD COLUMN, DROP COLUMN, CREATE TABLE, ALTER TABLE, RENAME), you MUST include the affected table/dataset in `schemaInvalidated`. The harness uses this to evict and re-fetch the cache entry.

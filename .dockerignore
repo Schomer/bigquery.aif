@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+.git
+.firebase
+.env*
+*.md
+test-results
+scripts
+.agents

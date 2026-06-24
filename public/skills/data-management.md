@@ -12,33 +12,34 @@ delete, remove, update, fix, merge, dedupe, alter, create table/view, rename, co
 
 NEVER self-invoke from an ambiguous request. If uncertain, return a clarifying question.
 
-## Operation classification
+## Execution Strategy Selection
 
-Every operation falls into one tier:
+For every response, you MUST set `executionStrategy` to tell the handler how to proceed:
 
-| Tier | Operations | Gate required |
-|---|---|---|
-| Safe | CREATE TABLE AS SELECT, CREATE VIEW, CREATE SCHEMA | None — show completion |
-| Reversible | UPDATE, INSERT, FILL NULLs, type CAST | Show preview (row count + example) + Confirm |
-| Hard to reverse | DELETE, DROP, MERGE | Show preview + explicit Confirm. Note time-travel window if applicable |
-| Dedup | DELETE duplicates keeping one copy | Special preview (show example group: key value, keep row, remove row(s)) + Confirm |
+### `DIRECT_EXECUTE`
+The operation creates new objects or is inherently safe. No preview or user confirmation needed.
+Use for: CREATE TABLE, CREATE VIEW, CREATE SCHEMA, INSERT INTO (adding new data), COPY_TABLE, RENAME, non-destructive ALTER TABLE (adding columns).
+When using this strategy, `previewSql` is optional (can be omitted or empty string).
+Also set `completionMessage` to a brief description of what was done (e.g., "Created table `dog_popularity` with 50 rows of sample data").
 
-## Workflow (for Reversible / Hard-to-Reverse / Dedup)
+### `PREVIEW_AND_CONFIRM`
+The operation modifies or deletes existing data. Must show a preview of what will be affected before the user confirms.
+Use for: DELETE, UPDATE, FILL_NULLS, destructive ALTER TABLE (dropping columns), TRUNCATE.
+`previewSql` is required and must return a COUNT(*) of affected rows.
 
-1. Classify the operation (tier above)
-2. If Safe: proceed directly, return completion result
-3. If anything else:
-   a. Generate a preview query (COUNT(*) of affected rows, or for DEDUPE: count of groups + total extra rows)
-   b. For DEDUPE: also fetch ONE example group (the actual key value, the row being kept with its `updated_at`, the row(s) being removed)
-   c. Check cost tier (dry run) — if COST_CONFIRM also fires, combine both gates into ONE confirmation card
-   d. Return a `CONFIRMATION_CARD` result (NOT the executed result) — set `requiresConfirmation: true`
-   e. Wait for user confirm before executing anything
+### `PREVIEW_AND_CONFIRM_DEDUPE`
+Deduplication operations that need the special example-group display.
+Use for: DEDUPE only.
+`previewSql` is required and must return a count of duplicate rows.
+Also provide `tiebreakerColumn` and `tiebreakerDirection`.
 
-4. On confirm:
-   - For DEDUPE: execute against the SPECIFIC ROW IDs identified in the preview (snapshot-based), NOT a re-evaluated condition
-   - For others: execute the operation
-   - After DDL: signal schema cache invalidation for the affected table/dataset
-   - Return completion result
+## Workflow
+
+1. Analyze the user's request and determine the operation type
+2. Choose the correct `executionStrategy` based on the guidelines above
+3. Generate `executionSql` (the actual SQL to run)
+4. If the strategy requires preview, generate `previewSql` too
+5. Return the structured response -- the handler takes it from there
 
 ## What you return (confirmation stage)
 
@@ -88,6 +89,10 @@ If `rowsAffected` ≠ `rowsExpected` (mismatch): set `mismatch: true` and `misma
 - Completion (mismatch): Use `mismatchNote` verbatim as the headline — ATTENTION tone
 - DDL completion: concise, factual — "Column `discount_code` added to `orders`"
 - Tone: NEUTRAL for all completion (even success) — calm design
+
+## Mock Data Generation
+
+- When asked to create or make a new table with data (where the user specifies the fields or data description but the source data doesn't exist in another table), you must generate a `CREATE OR REPLACE TABLE ... AS SELECT ... UNION ALL SELECT ...` SQL query to populate the table with realistic mock/sample data rows rather than leaving it empty.
 
 ## Schema cache invalidation
 

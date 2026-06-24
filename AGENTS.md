@@ -30,3 +30,11 @@ Verify with: `grep -rn "gemini-" src/ scripts/` — all results must show `gemin
 
 Do NOT use emojis anywhere — not in code, comments, UI text, log messages, commit messages, responses, plans, documentation, or any other output. This rule has zero exceptions.
 <!-- END:no-emojis -->
+
+<!-- BEGIN:auto-build -->
+# REQUIRED: Automatically build on file changes
+
+This project uses server-side rendering (no static export). To validate that edits compile correctly, always run the build command after making changes to the source files before ending your turn:
+1. `npm run build`
+<!-- END:auto-build -->
+

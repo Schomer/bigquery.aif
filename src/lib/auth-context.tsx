@@ -1,5 +1,7 @@
 // src/lib/auth-context.tsx
-// Firebase Auth — handles user identity and Google OAuth scopes for client-side API calls.
+// Firebase Auth popup sign-in with Google.
+// Provides both a Firebase Auth session (for Firestore) and a Google OAuth
+// access token (for BigQuery / Vertex AI REST calls).
 
 'use client';
 
@@ -14,11 +16,12 @@ import {
 import {
   onAuthStateChanged,
   signInWithPopup,
-  signOut as firebaseSignOut,
+  signOut as fbSignOut,
   GoogleAuthProvider,
   type User,
 } from 'firebase/auth';
 import { auth } from './firebase';
+import { setAccessToken as storeToken, getAccessToken } from './gis-auth';
 
 export interface GoogleUser {
   uid: string;
@@ -44,127 +47,117 @@ export interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-const DEFAULT_PROJECT = process.env.NEXT_PUBLIC_GOOGLE_PROJECT_ID ?? 'malloy-data';
+// Add BQ + Cloud Platform scopes to the Google provider
+const scopedProvider = new GoogleAuthProvider();
+scopedProvider.addScope('https://www.googleapis.com/auth/bigquery');
+scopedProvider.addScope('https://www.googleapis.com/auth/cloud-platform');
+scopedProvider.setCustomParameters({
+  prompt: 'consent',
+  include_granted_scopes: 'true',
+});
+
+function toGoogleUser(fbUser: User): GoogleUser {
+  return {
+    uid: fbUser.uid,
+    name: fbUser.displayName || '',
+    email: fbUser.email || '',
+    picture: fbUser.photoURL || '',
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<GoogleUser | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [activeProject, setActiveProjectState] = useState<string>(DEFAULT_PROJECT);
+  const [accessToken, setAccessTokenState] = useState<string | null>(null);
+  const [activeProject, setActiveProjectState] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load token on mount & listen to changes
-  useEffect(() => {
-    const handleTokenChange = () => {
-      try {
-        const stored = sessionStorage.getItem('google_access_token');
-        const expiresAtStr = sessionStorage.getItem('google_access_token_expires_at');
-        const expiresAt = expiresAtStr ? parseInt(expiresAtStr, 10) : 0;
-        if (stored && expiresAt > Date.now()) {
-          setAccessToken(stored);
-        } else {
-          sessionStorage.removeItem('google_access_token');
-          sessionStorage.removeItem('google_access_token_expires_at');
-          setAccessToken(null);
-        }
-      } catch {}
-    };
-
-    handleTokenChange();
-
-    window.addEventListener('storage', handleTokenChange);
-    window.addEventListener('bq-auth-error', handleTokenChange);
-    return () => {
-      window.removeEventListener('storage', handleTokenChange);
-      window.removeEventListener('bq-auth-error', handleTokenChange);
-    };
+  // Sync token to both React state and the module-level store
+  const setAccessToken = useCallback((token: string | null) => {
+    storeToken(token);
+    setAccessTokenState(token);
   }, []);
 
-  // ── Firebase auth state listener ──────────────────────────────────────────
+  // Listen for Firebase Auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: User | null) => {
-      if (!firebaseUser) {
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
+        setUser(toGoogleUser(fbUser));
+      } else {
         setUser(null);
-        setIsLoading(false);
-        return;
+        setAccessToken(null);
       }
-
-      setUser({
-        uid: firebaseUser.uid,
-        name: firebaseUser.displayName ?? '',
-        email: firebaseUser.email ?? '',
-        picture: firebaseUser.photoURL ?? '',
-      });
       setIsLoading(false);
     });
+    return unsub;
+  }, [setAccessToken]);
 
-    return unsubscribe;
-  }, []);
+  // Load active project from localStorage
+  useEffect(() => {
+    if (!user) return;
+    const saved = localStorage.getItem('bqaif_activeProject');
+    if (saved) setActiveProjectState(saved);
+  }, [user]);
 
-  // ── Sign in ───────────────────────────────────────────────────────────────
   const signIn = useCallback(async () => {
     try {
-      setError(null);
       setIsLoading(true);
-      const provider = new GoogleAuthProvider();
-      provider.addScope('https://www.googleapis.com/auth/bigquery');
-      provider.addScope('https://www.googleapis.com/auth/cloud-platform');
-      provider.setCustomParameters({ prompt: 'select_account consent' });
-      
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, scopedProvider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        sessionStorage.setItem('google_access_token', credential.accessToken);
-        const expiresAt = Date.now() + 3500 * 1000;
-        sessionStorage.setItem('google_access_token_expires_at', String(expiresAt));
-        setAccessToken(credential.accessToken);
+      // Try multiple ways to extract the Google OAuth access token
+      const oauthToken = credential?.accessToken
+        || (result as any)._tokenResponse?.oauthAccessToken
+        || (result as any)._tokenResponse?.access_token;
+      if (oauthToken) {
+        setAccessToken(oauthToken);
+        setError(null);
       } else {
-        throw new Error('Google OAuth access token was not returned. Please make sure Google authentication is configured correctly in the Firebase Console and that scopes are approved.');
+        // Show debug info so we can figure out what Firebase returned
+        const keys = credential ? Object.keys(credential) : [];
+        const trKeys = (result as any)._tokenResponse ? Object.keys((result as any)._tokenResponse) : [];
+        setError(`No access token found. credential keys: [${keys.join(',')}], _tokenResponse keys: [${trKeys.join(',')}]`);
       }
-      setUser({
-        uid: result.user.uid,
-        name: result.user.displayName ?? '',
-        email: result.user.email ?? '',
-        picture: result.user.photoURL ?? '',
-      });
+      if (result.user) {
+        setUser(toGoogleUser(result.user));
+      }
     } catch (err: any) {
-      console.error('Sign-in error:', err);
-      setError(err?.message || String(err));
+      console.error('[auth] Sign-in failed:', err.code, err.message);
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        // User closed the popup -- not an error
+      } else {
+        setError(`${err.code || 'unknown'}: ${err.message || 'Sign-in failed'}`);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setAccessToken]);
 
-  // ── Sign out ───────────────────────────────────────────────────────────────
   const signOut = useCallback(async () => {
-    await firebaseSignOut(auth);
-    sessionStorage.removeItem('google_access_token');
-    sessionStorage.removeItem('google_access_token_expires_at');
+    await fbSignOut(auth);
     setAccessToken(null);
     setUser(null);
-    setActiveProjectState(DEFAULT_PROJECT);
     setError(null);
-  }, []);
+  }, [setAccessToken]);
 
-  // ── Project switching ──────────────────────────────────────────────────────
   const setActiveProject = useCallback((p: string) => {
     setActiveProjectState(p);
+    localStorage.setItem('bqaif_activeProject', p);
   }, []);
 
   const setBqTokenState = useCallback((_refreshToken: string) => {
-    // Stub
+    // No-op
   }, []);
 
-  const projects = [activeProject];
+  const bqAuthorized = !!user && !!accessToken;
 
   return (
     <AuthContext.Provider value={{
       user,
       accessToken,
-      projects,
+      projects: activeProject ? [activeProject] : [],
       activeProject,
       isLoading,
-      bqAuthorized: !!accessToken,
+      bqAuthorized,
       bqRefreshToken: null,
       signIn,
       signOut,

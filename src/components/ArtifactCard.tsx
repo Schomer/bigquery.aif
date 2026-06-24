@@ -12,6 +12,7 @@ import { DiscoveryView } from './DiscoveryView';
 import { DataQualityView } from './DataQualityView';
 import { MonitoringView } from './MonitoringView';
 import { DataLoadingView } from './DataLoadingView';
+import { MultistepView } from './MultistepView';
 import { useState } from 'react';
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
   onConfirm?: () => void;
   onCancel?: () => void;
   onChipClick?: (chip: HandoffEnvelope) => void;
+  onInlineClick?: (message: string) => void;
 }
 
 const TONE_CLASSES: Record<string, string> = {
@@ -27,22 +29,26 @@ const TONE_CLASSES: Record<string, string> = {
   ATTENTION: 'tone-attention',
 };
 
-export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick }: Props) {
+export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInlineClick }: Props) {
   const [provenanceOpen, setProvenanceOpen] = useState(false);
   const toneClass = TONE_CLASSES[envelope.headline.tone] ?? 'tone-neutral';
 
-  // Convert chip click → send the chip's label as a message (primary path)
+  // Convert chip click -> send the chip's label as a message (primary path)
   // The label is meaningful natural language, e.g. "Inspect orders", "Show sample rows"
   function handleInlineClick(message: string) {
-    // Create a synthetic handoff envelope to preserve context
-    const syntheticChip: HandoffEnvelope = {
-      targetSkill: 'query',
-      label: message,
-      context: {},
-      sourceSkill: envelope.skill,
-      sourceResultRef: envelope.id,
-    };
-    onChipClick?.(syntheticChip);
+    if (onInlineClick) {
+      onInlineClick(message);
+    } else {
+      // Create a synthetic handoff envelope to preserve context
+      const syntheticChip: HandoffEnvelope = {
+        targetSkill: 'query',
+        label: message,
+        context: {},
+        sourceSkill: envelope.skill,
+        sourceResultRef: envelope.id,
+      };
+      onChipClick?.(syntheticChip);
+    }
   }
 
   return (
@@ -58,7 +64,6 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick }: Pro
       {/* Headline */}
       <div style={{ padding: '16px 20px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-          <ToneIcon tone={envelope.headline.tone} />
           <p style={{
             margin: 0,
             fontSize: 14,
@@ -66,7 +71,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick }: Pro
             color: 'var(--text)',
             lineHeight: 1.5,
           }}>
-            {envelope.headline.text}
+            {typeof envelope.headline.text === 'string' ? envelope.headline.text : String(envelope.headline.text ?? '')}
           </p>
         </div>
       </div>
@@ -79,6 +84,45 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick }: Pro
           onCancel={onCancel}
           onSendMessage={handleInlineClick}
         />
+
+        {envelope.insight && (
+          <div style={{
+            marginTop: 16,
+            padding: '12px 16px',
+            background: '#f5f3ff',
+            border: '1px solid #ddd6fe',
+            borderLeft: '4px solid #7c3aed',
+            borderRadius: 8,
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 4,
+            }}>
+              <span style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: '#6d28d9',
+                background: '#ede9fe',
+                padding: '2px 6px',
+                borderRadius: 4,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}>
+                Insight
+              </span>
+            </div>
+            <p style={{
+              margin: 0,
+              fontSize: 13,
+              color: 'var(--text)',
+              lineHeight: 1.4,
+            }}>
+              {typeof envelope.insight === 'string' ? envelope.insight : String(envelope.insight ?? '')}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Provenance (collapsible) */}
@@ -172,13 +216,13 @@ function Artifact({
     case 'SCHEMA_VIEW':
       return <SchemaView result={data as import('@/lib/types').SchemaResult} onSendMessage={onSendMessage} />;
     case 'TABLE':
-      return <DataTable result={data as import('@/lib/types').QueryResult} />;
+      return <DataTable result={data as import('@/lib/types').QueryResult} onSendMessage={onSendMessage} />;
     case 'LINE_CHART':
     case 'BAR_CHART':
     case 'AREA_CHART':
     case 'SCATTER':
     case 'PIE_CHART':
-      return <ChartWithToggle result={data as import('@/lib/types').QueryResult} chartType={type} />;
+      return <ChartWithToggle result={data as import('@/lib/types').QueryResult} chartType={type} onSendMessage={onSendMessage} />;
     case 'KPI_CARD':
       return <KpiCard result={data as import('@/lib/types').QueryResult} />;
     case 'CONFIRMATION_CARD':
@@ -195,6 +239,8 @@ function Artifact({
       return <MonitoringView result={data as import('@/lib/types').MonitoringResult} onSendMessage={onSendMessage} />;
     case 'DATA_LOADING_VIEW':
       return <DataLoadingView result={data as import('@/lib/types').DataLoadingResult} />;
+    case 'MULTISTEP_VIEW':
+      return <MultistepView envelope={envelope} onSendMessage={onSendMessage} />;
     default:
       return (
         <pre style={{ fontSize: 11, color: 'var(--text-muted)', overflowX: 'auto' }}>
@@ -210,9 +256,11 @@ type ChartToggleType = 'LINE_CHART' | 'BAR_CHART' | 'AREA_CHART' | 'SCATTER' | '
 function ChartWithToggle({
   result,
   chartType,
+  onSendMessage,
 }: {
   result: import('@/lib/types').QueryResult;
   chartType: ChartToggleType;
+  onSendMessage: (msg: string) => void;
 }) {
   const [view, setView] = useState<'chart' | 'table'>('chart');
 
@@ -254,35 +302,11 @@ function ChartWithToggle({
 
       {/* Content */}
       {view === 'chart' ? (
-        <ChartView result={result} chartType={chartType} />
+        <ChartView result={result} chartType={chartType} onSendMessage={onSendMessage} />
       ) : (
-        <DataTable result={result} />
+        <DataTable result={result} onSendMessage={onSendMessage} />
       )}
     </div>
-  );
-}
-
-function ToneIcon({ tone }: { tone: string }) {
-  const icons: Record<string, { symbol: string; color: string }> = {
-    NEUTRAL:   { symbol: '○', color: 'var(--text-dim)' },
-    POSITIVE:  { symbol: '+', color: 'var(--positive)' },
-    ATTENTION: { symbol: '!', color: 'var(--attention)' },
-  };
-  const { symbol, color } = icons[tone] ?? icons.NEUTRAL;
-  return (
-    <span style={{
-      width: 18,
-      height: 18,
-      borderRadius: '50%',
-      border: `1.5px solid ${color}`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: 10,
-      color,
-      flexShrink: 0,
-      marginTop: 1,
-    }}>{symbol}</span>
   );
 }
 

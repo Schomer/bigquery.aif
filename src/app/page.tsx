@@ -7,7 +7,7 @@ import { CrystalBallOracle } from '@/components/CrystalBallOracle';
 import { useAuth } from '@/lib/auth-context';
 import { useConversation } from '@/lib/conversation-context';
 import { usePage } from '@/lib/page-context';
-import type { ChatMessage, CompositionEnvelope, SkillName, DataManagementResult } from '@/lib/types';
+import type { ChatMessage, CompositionEnvelope, SkillName, DataManagementResult, HandoffEnvelope } from '@/lib/types';
 import { ChatOrchestrator } from '@/lib/chat-orchestrator';
 import { ArtifactCard } from '@/components/ArtifactCard';
 import { PromptsLibrary } from '@/components/PromptsLibrary';
@@ -89,6 +89,8 @@ export default function Home() {
     dataset?: string;
     project?: string;
   }>({});
+  const [statusText, setStatusText] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<{ message: string; type: string; sql?: string; retryFn?: () => void } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -113,10 +115,16 @@ export default function Home() {
 
   const autoResize = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto';
-    // 5 lines × 14px font × 1.5 line-height + 2px padding buffer
+    // 5 lines x 14px font x 1.5 line-height + 2px padding buffer
     const maxHeight = Math.round(14 * 1.5 * 5 + 2);
     el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
   };
+
+  useEffect(() => {
+    if (inputRef.current) {
+      autoResize(inputRef.current);
+    }
+  }, [input]);
   useEffect(() => {
     if (!user) return;
     setMessages([]);
@@ -178,6 +186,7 @@ export default function Home() {
         message: text,
         history: historyBefore,
         context: { ...context, project: activeProject || context.project },
+        onStatus: (s: string) => setStatusText(s),
       });
       const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
       const newAssistantMsg: ChatMessage = {
@@ -203,6 +212,7 @@ export default function Home() {
       console.error(err);
     } finally {
       setLoading(false);
+      setStatusText(null);
       setRerunningIdx(null);
     }
   }
@@ -230,6 +240,7 @@ export default function Home() {
         message: userText,
         history: historyUpTo.slice(0, -1),
         context: { ...context, project: activeProject || context.project },
+        onStatus: (s: string) => setStatusText(s),
       });
       const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
       const newAssistantMsg: ChatMessage = {
@@ -251,6 +262,7 @@ export default function Home() {
       console.error(err);
     } finally {
       setLoading(false);
+      setStatusText(null);
       setRerunningIdx(null);
     }
   }
@@ -275,6 +287,7 @@ export default function Home() {
         message: text,
         history: messages,
         context: { ...context, project: activeProject || context.project },
+        onStatus: (s: string) => setStatusText(s),
       });
 
       const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
@@ -291,19 +304,15 @@ export default function Home() {
 
       if (envelopes.length > 0) {
         const last = envelopes[envelopes.length - 1];
-        const schemaData = last.skill === 'schema'
-          ? (last.primaryArtifact.data as { dataset?: string; table?: string } | null)
-          : null;
         setContext((prev) => ({
           ...prev,
           lastSkill: last.skill,
           lastResultRef: last.id,
-          // Capture dataset context when browsing a DATASET so table clicks can resolve correctly
-          ...(schemaData?.dataset ? { dataset: schemaData.dataset } : {}),
-          ...(schemaData?.table ? { lastTable: schemaData.table } : {}),
+          ...extractContextFromEnvelope(last),
         }));
       }
 
+      setLastError(null);
       // Persist to Firestore — fire and forget, never surface Firestore errors to the user
       persistConversation(finalMsgs).catch((e) => console.warn('[persist]', e));
 
@@ -311,25 +320,37 @@ export default function Home() {
       console.error(err);
       const msg = err?.message || String(err);
       
-      let errorText = `Something went wrong. Details: ${msg}`;
+      let errorType = 'unknown';
+      let errorText = msg;
+
       if (msg.includes('Gemini API failed')) {
-        errorText = `Gemini API call failed. Details: ${msg.replace('Gemini API failed: ', '')}. If your Gemini API Key (starts with AQ.) has expired, please generate a fresh key and update NEXT_PUBLIC_GEMINI_API_KEY in your .env.local file.`;
-      } else if (msg.includes('access token') || msg.includes('credentials') || msg.includes('access_denied') || msg.includes('UNAUTHENTICATED') || msg.includes('authorized')) {
-        errorText = `BigQuery authentication failed. Details: ${msg}. If running locally, please run \`/Users/schomer/google-cloud-sdk/bin/gcloud auth application-default login\` in your terminal to authenticate your local environment. If hosted, verify that your service account has BigQuery permissions.`;
+        errorType = 'gemini';
+        errorText = msg.replace('Gemini API failed: ', '');
+      } else if (msg.includes('access token') || msg.includes('credentials') || msg.includes('access_denied') || msg.includes('UNAUTHENTICATED') || msg.includes('authorized') || msg.includes('access not authorized') || msg.includes('sign in')) {
+        errorType = 'auth';
+        errorText = 'Your session has expired. Please sign in again.';
       } else if (msg.includes('quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')) {
-        errorText = `The AI model is a bit busy right now. Wait a few seconds and try again. Details: ${msg}`;
+        errorType = 'rate_limit';
+        errorText = 'The service is temporarily busy. Try again in a few seconds.';
+      } else if (msg.includes('Syntax error') || msg.includes('query failed')) {
+        errorType = 'sql';
+        errorText = msg.replace('BigQuery query failed: ', '');
       }
+
+      const retryFn = () => sendMessage(text);
+      setLastError({ message: errorText, type: errorType, retryFn });
 
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: errorText,
+          content: '',
           timestamp: new Date().toISOString(),
         },
       ]);
     } finally {
       setLoading(false);
+      setStatusText(null);
       inputRef.current?.focus();
     }
   }
@@ -341,6 +362,7 @@ export default function Home() {
         message: 'confirm',
         history: messages,
         context: { ...context, project: activeProject || context.project, confirmedPayload: envelope.primaryArtifact.data as DataManagementResult },
+        onStatus: (s: string) => setStatusText(s),
       });
       const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
       const assistantMsg: ChatMessage = { role: 'assistant', content: '', envelopes, timestamp: new Date().toISOString() };
@@ -365,8 +387,116 @@ export default function Home() {
     );
   }
 
-  function handleChipClick(chip: { label: string }) {
-    sendMessage(chip.label);
+  function extractContextFromEnvelope(env: CompositionEnvelope): Partial<typeof context> {
+    const data = env.primaryArtifact.data as Record<string, unknown> | null;
+    if (!data) return {};
+    const result: Partial<typeof context> = {};
+
+    // Schema results
+    if (data.dataset && typeof data.dataset === 'string') result.dataset = data.dataset;
+    if (data.table && typeof data.table === 'string') result.lastTable = data.table;
+
+    // Query results -- extract table from SQL
+    if (data.sql && typeof data.sql === 'string') {
+      const sqlMatch = (data.sql as string).match(/\bFROM\s+`?([A-Za-z0-9_.-]+)`?/i);
+      if (sqlMatch) {
+        const parts = sqlMatch[1].split('.');
+        if (parts.length >= 3) result.dataset = parts[parts.length - 2];
+        result.lastTable = parts[parts.length - 1];
+      }
+    }
+
+    // Data quality / data management -- table field is fully qualified
+    if (env.skill === 'data-quality' || env.skill === 'data-management') {
+      const tableFq = data.table as string | undefined;
+      if (tableFq && typeof tableFq === 'string') {
+        const parts = tableFq.replace(/`/g, '').split('.');
+        if (parts.length >= 2) result.dataset = parts[parts.length - 2];
+        result.lastTable = parts[parts.length - 1];
+      }
+    }
+
+    return result;
+  }
+
+  async function handleChipClick(chip: HandoffEnvelope) {
+    if (loading) return;
+    setLoading(true);
+    setLastError(null);
+
+    const chipContext = chip.context as Record<string, unknown>;
+
+    const userMsg: ChatMessage = {
+      role: 'user',
+      content: chip.label,
+      timestamp: new Date().toISOString(),
+    };
+    const updatedMsgs = [...messages, userMsg];
+    setMessages(updatedMsgs);
+
+    try {
+      const mergedContext = {
+        ...context,
+        project: activeProject || context.project,
+        forcedSkill: chip.targetSkill as SkillName,
+        ...(chipContext.dataset ? { dataset: String(chipContext.dataset) } : {}),
+        ...(chipContext.table ? { lastTable: String(chipContext.table) } : {}),
+      };
+
+      // Build a more explicit message from chip context
+      let enrichedMessage = chip.label;
+      if (chipContext.sql && typeof chipContext.sql === 'string') {
+        enrichedMessage = `${chip.label}. Use this SQL: ${chipContext.sql}`;
+      } else if (chipContext.table && typeof chipContext.table === 'string') {
+        enrichedMessage = `${chip.label} for table ${chipContext.table}`;
+      } else if (chipContext.dataset && typeof chipContext.dataset === 'string') {
+        enrichedMessage = `${chip.label} in dataset ${chipContext.dataset}`;
+      }
+
+      const data = await ChatOrchestrator.processMessage({
+        message: enrichedMessage,
+        history: messages,
+        context: mergedContext,
+        onStatus: (s: string) => setStatusText(s),
+      });
+
+      const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
+      const assistantMsg: ChatMessage = {
+        role: 'assistant',
+        content: '',
+        envelopes,
+        timestamp: new Date().toISOString(),
+      };
+
+      const finalMsgs = [...updatedMsgs, assistantMsg];
+      setMessages(finalMsgs);
+
+      if (envelopes.length > 0) {
+        const last = envelopes[envelopes.length - 1];
+        setContext((prev) => ({
+          ...prev,
+          lastSkill: last.skill,
+          lastResultRef: last.id,
+          ...extractContextFromEnvelope(last),
+        }));
+      }
+
+      setLastError(null);
+      persistConversation(finalMsgs).catch((e) => console.warn('[persist]', e));
+    } catch (err: any) {
+      console.error(err);
+      const msg = err?.message || String(err);
+      setLastError({ message: msg, type: 'unknown', retryFn: () => handleChipClick(chip) });
+      setMessages((prev) => [...prev, { role: 'assistant', content: '', timestamp: new Date().toISOString() }]);
+    } finally {
+      setLoading(false);
+      setStatusText(null);
+    }
+  }
+
+  function handleInlineClick(message: string) {
+    setInput(message);
+    inputRef.current?.focus();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -416,6 +546,26 @@ export default function Home() {
                 Ask anything about your data
               </p>
 
+              {!activeProject && (
+                <div style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '14px 20px',
+                  marginBottom: 20,
+                  maxWidth: 640,
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  color: 'var(--text-muted)',
+                  fontSize: 13,
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#f59e0b' }}>info</span>
+                  Select a GCP project from the sidebar to get started.
+                </div>
+              )}
+
 
 
 
@@ -438,7 +588,8 @@ export default function Home() {
                 value={input}
                 onChange={(e) => { setInput(e.target.value); autoResize(e.target); }}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about your data…"
+                placeholder={activeProject ? 'Ask about your data…' : 'Select a project first…'}
+                disabled={!activeProject}
                 rows={1}
                 style={{
                   flex: 1,
@@ -451,11 +602,13 @@ export default function Home() {
                   lineHeight: 1.5,
                   fontFamily: 'inherit',
                   alignSelf: 'center',
+                  opacity: activeProject ? 1 : 0.5,
+                  cursor: activeProject ? 'text' : 'not-allowed',
                 }}
               />
               <button
                 onClick={() => sendMessage()}
-                disabled={loading || !input.trim()}
+                disabled={loading || !input.trim() || !activeProject}
                 style={{
                   width: 34,
                   height: 34,
@@ -579,7 +732,7 @@ export default function Home() {
                           userSelect: 'text',
                         }}
                       >
-                        {msg.content}
+                        {typeof msg.content === 'string' ? msg.content : String(msg.content ?? '')}
                       </div>
                     )}
                   </div>
@@ -592,11 +745,69 @@ export default function Home() {
                         onConfirm={() => handleConfirm(env)}
                         onCancel={() => handleCancel(env)}
                         onChipClick={handleChipClick}
+                        onInlineClick={handleInlineClick}
                       />
                     ))}
                     {!msg.envelopes && msg.content && (
                       <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-                        {msg.content}
+                        {typeof msg.content === 'string' ? msg.content : String(msg.content)}
+                      </div>
+                    )}
+                    {/* Error card */}
+                    {!msg.envelopes && !msg.content && lastError && i === messages.length - 1 && (
+                      <div style={{
+                        background: lastError.type === 'auth' ? '#fff7ed' : lastError.type === 'rate_limit' ? '#fffbeb' : '#fef2f2',
+                        border: `1px solid ${lastError.type === 'auth' ? '#fed7aa' : lastError.type === 'rate_limit' ? '#fde68a' : '#fecaca'}`,
+                        borderRadius: 12,
+                        padding: '16px 20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{
+                            fontSize: 18,
+                            color: lastError.type === 'auth' ? '#c2410c' : lastError.type === 'rate_limit' ? '#b45309' : '#dc2626',
+                          }}>
+                            {lastError.type === 'auth' ? 'lock' : lastError.type === 'rate_limit' ? 'schedule' : lastError.type === 'sql' ? 'code_off' : 'warning'}
+                          </span>
+                          <span style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: lastError.type === 'auth' ? '#c2410c' : lastError.type === 'rate_limit' ? '#b45309' : '#dc2626',
+                          }}>
+                            {lastError.type === 'auth' ? 'Session Expired'
+                              : lastError.type === 'rate_limit' ? 'Temporarily Busy'
+                              : lastError.type === 'sql' ? 'Query Error'
+                              : lastError.type === 'gemini' ? 'AI Service Error'
+                              : 'Something Went Wrong'}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
+                          {typeof lastError.message === 'string' ? lastError.message : String(lastError.message ?? '')}
+                        </p>
+                        {lastError.sql && (
+                          <div className="sql-block" style={{ fontSize: 11, marginTop: 4 }}>{lastError.sql}</div>
+                        )}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                          {lastError.retryFn && (
+                            <button
+                              onClick={() => { setLastError(null); lastError.retryFn?.(); }}
+                              style={{
+                                padding: '5px 14px',
+                                borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-2)',
+                                color: 'var(--text)',
+                                fontSize: 12,
+                                fontWeight: 500,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Try again
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                     {/* Regenerate button / inline spinner */}
@@ -649,7 +860,26 @@ export default function Home() {
               </div>
             ))}
 
-            {loading && rerunningIdx === null && <CrystalBallThinking />}
+            {loading && rerunningIdx === null && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '6px 0 8px',
+              }}>
+                <SparkSpinner size={24} />
+                <span style={{
+                  fontSize: 13,
+                  fontStyle: 'italic',
+                  color: 'var(--text-muted)',
+                  fontFamily: "'Google Sans', 'Inter', sans-serif",
+                  letterSpacing: '0.01em',
+                  transition: 'opacity 0.4s ease',
+                }}>
+                  {statusText || 'Processing...'}
+                </span>
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
         )}
@@ -679,7 +909,8 @@ export default function Home() {
               value={input}
               onChange={(e) => { setInput(e.target.value); autoResize(e.target); }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a follow-up…"
+              placeholder={activeProject ? 'Ask a follow-up…' : 'Select a project first…'}
+              disabled={!activeProject}
               rows={1}
               style={{
                 flex: 1,
@@ -692,11 +923,13 @@ export default function Home() {
                 lineHeight: 1.5,
                 fontFamily: 'inherit',
                 alignSelf: 'center',
+                opacity: activeProject ? 1 : 0.5,
+                cursor: activeProject ? 'text' : 'not-allowed',
               }}
             />
             <button
               onClick={() => sendMessage()}
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || !activeProject}
               style={{
                 width: 34,
                 height: 34,

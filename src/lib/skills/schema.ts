@@ -1,25 +1,64 @@
 // src/lib/skills/schema.ts
-// Client-side Schema skill implementation using direct BigQuery REST API calls.
+// Client-side schema skill using direct BigQuery REST API calls.
 
+import { getAccessToken } from '../gis-auth';
 import {
   getCacheKey,
   getFromCache,
   setInCache,
 } from '../schema-cache';
 import type { SchemaResult, SchemaColumn } from '../types';
-import { checkResponse } from '../bigquery-client';
 
-const BQ_BASE = 'https://bigquery.googleapis.com/bigquery/v2';
+const BQ_BASE = 'https://bigquery.googleapis.com/bigquery/v2/projects';
 
-function getHeaders(): Headers {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('google_access_token') : null;
-  if (!token) {
-    throw new Error('BigQuery access not authorized. Please sign in with Google.');
+async function bqGet(url: string): Promise<any> {
+  const token = getAccessToken();
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data?.error?.message || `HTTP ${res.status}`);
   }
-  const headers = new Headers();
-  headers.set('Authorization', `Bearer ${token}`);
-  headers.set('Content-Type', 'application/json');
-  return headers;
+  return data;
+}
+
+async function bqQuery(sql: string, project: string): Promise<{ columns: string[]; rows: any[][] }> {
+  const token = getAccessToken();
+  const res = await fetch(`${BQ_BASE}/${encodeURIComponent(project)}/queries`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      query: sql,
+      useLegacySql: false,
+      maxResults: 1000,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data?.error?.message || `HTTP ${res.status}`);
+  }
+  const fields = data.schema?.fields ?? [];
+  const columns = fields.map((f: any) => f.name);
+  const rawRows = data.rows ?? [];
+  const rows = rawRows.map((r: any) =>
+    (r.f ?? []).map((cell: any) => cell.v ?? null)
+  );
+  return { columns, rows };
+}
+
+async function resolveDefaultDatasetForProject(project: string): Promise<string> {
+  try {
+    const data = await bqGet(`${BQ_BASE}/${encodeURIComponent(project)}/datasets`);
+    const datasets = data.datasets || [];
+    if (datasets.length > 0) {
+      return datasets[0].datasetReference?.datasetId || '';
+    }
+  } catch {}
+  return '';
 }
 
 // ─── Public entrypoint ────────────────────────────────────────────────────────
@@ -29,17 +68,24 @@ export async function fetchSchema(
   table?: string,
   projectOverride?: string,
 ): Promise<SchemaResult> {
-  const PROJ = projectOverride || 'malloy-data';
-  const key = getCacheKey(PROJ, dataset, table);
+  const PROJ = projectOverride || '';
+
+  // Guard against confusing project name with dataset name
+  let resolvedDataset = dataset;
+  if (resolvedDataset && PROJ && resolvedDataset.toLowerCase() === PROJ.toLowerCase()) {
+    resolvedDataset = table ? await resolveDefaultDatasetForProject(PROJ) : undefined;
+  }
+
+  const key = getCacheKey(PROJ, resolvedDataset, table);
   const cached = getFromCache(key);
   if (cached) return cached;
 
   let result: SchemaResult;
 
-  if (table && dataset) {
-    result = await fetchTableSchema(PROJ, dataset, table);
-  } else if (dataset) {
-    result = await fetchDatasetSchema(PROJ, dataset);
+  if (table && resolvedDataset) {
+    result = await fetchTableSchema(PROJ, resolvedDataset, table);
+  } else if (resolvedDataset) {
+    result = await fetchDatasetSchema(PROJ, resolvedDataset);
   } else {
     result = await fetchProjectSchema(PROJ);
   }
@@ -51,12 +97,7 @@ export async function fetchSchema(
 // ─── Project-level: list all datasets ─────────────────────────────────────────
 
 async function fetchProjectSchema(project: string): Promise<SchemaResult> {
-  const res = await fetch(`${BQ_BASE}/projects/${project}/datasets`, {
-    headers: getHeaders()
-  });
-  const data = await res.json();
-  checkResponse(res, data);
-  if (data.error) throw new Error(data.error.message);
+  const data = await bqGet(`${BQ_BASE}/${encodeURIComponent(project)}/datasets`);
 
   const datasets = data.datasets || [];
   const columns: SchemaColumn[] = datasets.map((ds: any) => ({
@@ -77,19 +118,16 @@ async function fetchProjectSchema(project: string): Promise<SchemaResult> {
 // ─── Dataset-level: list all tables ───────────────────────────────────────────
 
 async function fetchDatasetSchema(project: string, dataset: string): Promise<SchemaResult> {
-  const res = await fetch(`${BQ_BASE}/projects/${project}/datasets/${dataset}/tables`, {
-    headers: getHeaders()
-  });
-  const data = await res.json();
-  checkResponse(res, data);
-  if (data.error) throw new Error(data.error.message);
+  const data = await bqGet(
+    `${BQ_BASE}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/tables`
+  );
 
   const tables = data.tables || [];
   const columns: SchemaColumn[] = tables.map((t: any) => ({
     name: t.tableReference?.tableId ?? '',
     type: t.type ?? 'TABLE',
     mode: 'NULLABLE' as const,
-    description: t.friendlyName ?? null,
+    description: null,
     fields: [],
   }));
 
@@ -107,29 +145,32 @@ async function fetchTableSchema(
   dataset: string,
   table: string,
 ): Promise<SchemaResult> {
-  const res = await fetch(`${BQ_BASE}/projects/${project}/datasets/${dataset}/tables/${table}`, {
-    headers: getHeaders()
-  });
-  const metadata = await res.json();
-  checkResponse(res, metadata);
-  if (metadata.error) throw new Error(metadata.error.message);
+  const data = await bqGet(
+    `${BQ_BASE}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/tables/${encodeURIComponent(table)}`
+  );
 
-  const columns = (metadata.schema?.fields ?? []).map(mapField);
+  const schema = data.schema || {};
+  const columns = (schema.fields ?? []).map(mapField);
+
   const constraints = await fetchTableConstraints(project, dataset, table);
+
+  const partitioning = data.timePartitioning
+    ? { field: data.timePartitioning.field ?? '_PARTITIONTIME', type: data.timePartitioning.type ?? 'DAY' }
+    : data.rangePartitioning
+      ? { field: data.rangePartitioning.field ?? '', type: 'RANGE' }
+      : null;
 
   return {
     skill: 'schema', scope: 'TABLE', project, dataset, table,
-    description: metadata.description ?? null,
-    type: metadata.type ?? 'TABLE',
+    description: data.description ?? null,
+    type: data.type ?? 'TABLE',
     columns,
-    partitioning: metadata.timePartitioning
-      ? { field: metadata.timePartitioning.field ?? '_PARTITIONTIME', type: metadata.timePartitioning.type ?? 'DAY' }
-      : null,
-    clustering: metadata.clustering?.fields ?? null,
-    rowCount: metadata.numRows ? parseInt(metadata.numRows, 10) : null,
-    sizeBytes: metadata.numBytes ? parseInt(metadata.numBytes, 10) : null,
-    lastModifiedTime: metadata.lastModifiedTime
-      ? new Date(parseInt(metadata.lastModifiedTime, 10)).toISOString()
+    partitioning,
+    clustering: data.clustering?.fields ?? null,
+    rowCount: data.numRows ? parseInt(data.numRows, 10) : null,
+    sizeBytes: data.numBytes ? parseInt(data.numBytes, 10) : null,
+    lastModifiedTime: data.lastModifiedTime
+      ? new Date(parseInt(data.lastModifiedTime, 10)).toISOString()
       : null,
     tableConstraints: constraints,
     fetchedAt: new Date().toISOString(),
@@ -180,20 +221,10 @@ async function fetchTableConstraints(
       ORDER BY tc.CONSTRAINT_TYPE, kcu.ORDINAL_POSITION
     `;
 
-    const res = await fetch(`${BQ_BASE}/projects/${project}/queries`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ query, useLegacySql: false })
-    });
-    const data = await res.json();
-    checkResponse(res, data);
-    if (data.error) throw new Error(data.error.message);
-
-    const rows = data.rows || [];
-    const fields = data.schema?.fields || [];
-    const getVal = (row: any, fieldName: string) => {
-      const idx = fields.findIndex((f: any) => f.name === fieldName);
-      return idx !== -1 ? row.f[idx]?.v : null;
+    const { columns: cols, rows } = await bqQuery(query, project);
+    const getVal = (row: any[], fieldName: string) => {
+      const idx = cols.indexOf(fieldName);
+      return idx !== -1 ? row[idx] : null;
     };
 
     const primaryKey: string[] = [];
@@ -234,7 +265,7 @@ async function fetchTableConstraints(
       })),
     };
   } catch {
-    // INFORMATION_SCHEMA may not be accessible — return empty gracefully
+    // INFORMATION_SCHEMA may not be accessible -- return empty gracefully
     return { primaryKey: [], foreignKeys: [] };
   }
 }

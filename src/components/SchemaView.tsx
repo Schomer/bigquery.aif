@@ -22,39 +22,52 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'PROJECT') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {result.columns.map((ds) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {result.columns.map((ds, i) => (
           <ClickableRow
             key={ds.name}
             onClick={() => send(`Tell me more about ${ds.name}`)}
             tooltip={`Click to list tables in ${ds.name}`}
+            index={i}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-dim)', flexShrink: 0 }}>database</span>
-            <span style={{ fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font-mono)', flex: 1 }}>{ds.name}</span>
+            <IconBadge icon="database" color="#6366f1" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-mono)', display: 'block' }}>{ds.name}</span>
+            </div>
+            <TypePill label="Dataset" />
             <ArrowIcon />
           </ClickableRow>
         ))}
+        <ListAnimationStyle />
       </div>
     );
   }
 
   if (result.scope === 'DATASET') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {result.columns.map((t) => (
-          <ClickableRow
-            key={t.name}
-            onClick={() => send(`Show me more about ${result.dataset}.${t.name}`)}
-            tooltip={`Click to inspect ${t.name}`}
-          >
-            <TypeBadge type={t.type} />
-            <span style={{ fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font-mono)', flex: 1 }}>{t.name}</span>
-            {t.description && (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.description}</span>
-            )}
-            <ArrowIcon />
-          </ClickableRow>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {result.columns.map((t, i) => {
+          const badge = TYPE_BADGE_MAP[t.type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: t.type ?? 'Unknown' };
+          return (
+            <ClickableRow
+              key={t.name}
+              onClick={() => send(`Show me more about ${result.dataset}.${t.name}`)}
+              tooltip={`Click to inspect ${t.name}`}
+              index={i}
+            >
+              <IconBadge icon={badge.icon} color={badge.color} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-mono)', display: 'block' }}>{t.name}</span>
+                {t.description && (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 2, display: 'block' }}>{t.description}</span>
+                )}
+              </div>
+              <TypePill label={badge.label} color={badge.color} />
+              <ArrowIcon />
+            </ClickableRow>
+          );
+        })}
+        <ListAnimationStyle />
       </div>
     );
   }
@@ -68,7 +81,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 type Tab = 'schema' | 'sample' | 'profile';
 
 function TableSchemaView({ result, onSendMessage }: { result: SchemaResult; onSendMessage: (msg: string) => void }) {
-  const [activeTab, setActiveTab] = useState<Tab>('schema');
+  const [activeTab, setActiveTab] = useState<Tab>('sample');
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const { accessToken, activeProject } = useAuth();
@@ -97,8 +110,8 @@ function TableSchemaView({ result, onSendMessage }: { result: SchemaResult; onSe
   }, [tableRef, accessToken, activeProject]);
 
   const tabs: Array<{ id: Tab; label: string }> = [
-    { id: 'schema', label: 'Schema' },
     { id: 'sample', label: 'Sample rows' },
+    { id: 'schema', label: 'Schema' },
     { id: 'profile', label: 'Profile' },
   ];
 
@@ -313,7 +326,7 @@ function SampleTab({ preview, error }: { preview: PreviewResponse | null; error:
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                   }}>
-                    {cell === null ? <span style={{ opacity: 0.4 }}>NULL</span> : String(cell)}
+                    {cell === null ? <span style={{ opacity: 0.4 }}>NULL</span> : typeof cell === 'object' ? JSON.stringify(cell) : String(cell)}
                   </td>
                 ))}
               </tr>
@@ -1471,14 +1484,17 @@ function ClickableRow({
   children,
   onClick,
   tooltip,
+  index = 0,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   tooltip: string;
+  index?: number;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
+      className="schema-list-row"
       title={tooltip}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
@@ -1486,14 +1502,23 @@ function ClickableRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '8px 12px',
-        background: hovered ? 'var(--accent-dim)' : 'var(--surface-2)',
-        borderRadius: 6,
+        gap: 12,
+        padding: '10px 14px',
+        background: hovered ? 'var(--accent-dim)' : 'var(--surface)',
+        borderRadius: 10,
         border: `1px solid ${hovered ? 'var(--accent)' : 'var(--border-subtle)'}`,
         cursor: 'pointer',
-        transition: 'all 0.12s',
+        transition: 'all 0.18s ease',
         userSelect: 'none',
+        boxShadow: hovered
+          ? '0 2px 12px rgba(26, 115, 232, 0.12)'
+          : '0 1px 3px rgba(0,0,0,0.04)',
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+        animationName: 'listRowSlideIn',
+        animationDuration: '0.3s',
+        animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        animationFillMode: 'both',
+        animationDelay: `${index * 40}ms`,
       }}
     >
       {children}
@@ -1616,30 +1641,91 @@ function InlineAction({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
+const TYPE_BADGE_MAP: Record<string, { icon: string; color: string; label: string }> = {
+  TABLE:             { icon: 'table_chart',   color: '#1a73e8', label: 'Table' },
+  VIEW:              { icon: 'visibility',    color: '#7c3aed', label: 'View' },
+  MATERIALIZED_VIEW: { icon: 'table_rows',    color: '#059669', label: 'Mat. View' },
+  EXTERNAL:          { icon: 'cloud',         color: '#d97706', label: 'External' },
+  DATASET:           { icon: 'database',      color: '#6366f1', label: 'Dataset' },
+};
+
 function ArrowIcon() {
   return (
-    <span style={{ fontSize: 12, color: 'var(--text-dim)', marginLeft: 'auto', flexShrink: 0 }}>→</span>
+    <span
+      className="material-symbols-outlined schema-list-arrow"
+      style={{
+        fontSize: 16,
+        color: 'var(--text-dim)',
+        flexShrink: 0,
+        transition: 'transform 0.18s ease, color 0.18s ease',
+      }}
+    >
+      chevron_right
+    </span>
+  );
+}
+
+function IconBadge({ icon, color }: { icon: string; color: string }) {
+  return (
+    <div style={{
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      background: `${color}14`,
+      border: `1px solid ${color}30`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    }}>
+      <span
+        className="material-symbols-outlined"
+        style={{ fontSize: 16, color }}
+      >
+        {icon}
+      </span>
+    </div>
+  );
+}
+
+function TypePill({ label, color }: { label: string; color?: string }) {
+  const c = color ?? 'var(--text-muted)';
+  return (
+    <span style={{
+      fontSize: 10,
+      fontWeight: 500,
+      color: c,
+      background: `${c}12`,
+      border: `1px solid ${c}25`,
+      padding: '2px 8px',
+      borderRadius: 12,
+      letterSpacing: '0.02em',
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function ListAnimationStyle() {
+  return (
+    <style>{`
+      @keyframes listRowSlideIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .schema-list-row:hover .schema-list-arrow {
+        transform: translateX(3px);
+        color: var(--accent) !important;
+      }
+    `}</style>
   );
 }
 
 function TypeBadge({ type }: { type?: string }) {
-  const iconMap: Record<string, { icon: string; color: string }> = {
-    TABLE:             { icon: 'table_chart',   color: 'var(--text-dim)' },
-    VIEW:              { icon: 'visibility',    color: 'var(--text-dim)' },
-    MATERIALIZED_VIEW: { icon: 'table_rows',    color: 'var(--text-dim)' },
-    EXTERNAL:          { icon: 'cloud',         color: 'var(--text-dim)' },
-    DATASET:           { icon: 'database',      color: 'var(--text-dim)' },
-  };
-  const { icon, color } = iconMap[type ?? ''] ?? { icon: 'help_outline', color: 'var(--text-dim)' };
-  return (
-    <span
-      className="material-symbols-outlined"
-      title={type ?? ''}
-      style={{ fontSize: 15, color, flexShrink: 0 }}
-    >
-      {icon}
-    </span>
-  );
+  const entry = TYPE_BADGE_MAP[type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: type ?? '' };
+  return <IconBadge icon={entry.icon} color={entry.color} />;
 }
 
 function Badge({ label, color }: { label: string; color: string }) {

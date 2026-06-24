@@ -17,7 +17,18 @@ const MUTATING_VERBS = [
   'trim the', 'clean the', 'fix the', 'correct the',
   // DDL variants — 'create a view' and 'create a table' (with article) won't match without these
   'create a view', 'create a table', 'create or replace',
+  'make a table', 'make a new table', 'make table',
 ];
+
+// Pre-compiled word-boundary patterns for mutating verbs.
+// Prevents table names like "sales_deduped" from false-matching "dedupe".
+const MUTATING_VERB_PATTERNS = MUTATING_VERBS.map((verb) => {
+  const escaped = verb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 'normaliz' is an intentional prefix to match normalize/normalizing/etc.
+  const suffix = verb === 'normaliz' ? '' : '\\b';
+  return new RegExp(`\\b${escaped}${suffix}`, 'i');
+});
+
 
 const DATA_QUALITY_SIGNALS = [
   'profile', 'quality', 'duplicate', 'duplicates', 'null', 'nulls',
@@ -32,13 +43,18 @@ const SCHEMA_SIGNALS = [
   'what datasets', 'what is in', "what's in", 'structure', 'type of',
   'data type', 'list tables', 'show tables', 'list datasets',
   'show columns', 'list columns', 'what columns', 'column types',
+  'list of datasets', 'list of tables', 'show datasets', 'datasets in',
+  'tables in', 'datasets of', 'tables of',
+  'list all datasets', 'list all tables', 'show me datasets',
+  'show me the datasets', 'show me tables', 'show me the tables',
+  'list of all datasets', 'list of all tables',
   // Natural click-through phrases ("tell me more about X", "explore X")
   'tell me more', 'show me more about', 'more about', 'tell me about',
   'inspect', 'details about', 'explore', 'look at',
 ];
 
 const DISCOVERY_SIGNALS = [
-  'search for', 'find a table', 'find tables', 'compare', 'lineage',
+  'search', 'find a table', 'find tables', 'compare', 'lineage',
   'where does this come from', 'what depends on', 'related to',
 ];
 
@@ -82,7 +98,7 @@ export function classifyIntent(
   const lower = message.toLowerCase();
 
   // ── Hard rule: Data Management requires explicit mutating verb ─────────────
-  const hasMutatingVerb = MUTATING_VERBS.some((verb) => lower.includes(verb));
+  const hasMutatingVerb = MUTATING_VERB_PATTERNS.some((re) => re.test(lower));
 
   if (hasMutatingVerb) {
     return {
@@ -107,6 +123,20 @@ export function classifyIntent(
   if (MONITORING_SIGNALS.some((s) => lower.includes(s))) {
     return {
       skill: 'monitoring',
+      confidence: 'high',
+      isHandoff: false,
+      ambiguousReadWrite: false,
+    };
+  }
+
+  // ── Filter / equality pattern → Query ──────────────────────────────────
+  // Messages like "show me more about `col` = 'VALUE'" or "filter where col = 42"
+  // contain an equality comparison and should go to the query skill, not schema.
+  const hasFilterPattern = /[`']?\w+[`']?\s*=\s*(?:'[^']*'|\d+)/i.test(message)
+    || lower.includes('filter') || lower.includes('where');
+  if (hasFilterPattern && !hasMutatingVerb) {
+    return {
+      skill: 'query',
       confidence: 'high',
       isHandoff: false,
       ambiguousReadWrite: false,

@@ -4,11 +4,31 @@ import type { DataManagementCompleteResult } from '@/lib/types';
 
 interface Props { result: DataManagementCompleteResult; }
 
+const CREATION_OPERATIONS = ['CREATE_TABLE', 'CREATE_VIEW', 'CREATE_SCHEMA', 'COPY_TABLE', 'RENAME'];
+
 export function CompletionCard({ result }: Props) {
+  const isCreation = CREATION_OPERATIONS.includes(result.operation);
+
+  if (isCreation) {
+    return (
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        {result.completionMessage && (
+          <Metric label="Result" value={result.completionMessage} color="var(--positive)" />
+        )}
+        {result.jobId && (
+          <Metric label="Job ID" value={result.jobId} color="var(--text-dim)" mono />
+        )}
+      </div>
+    );
+  }
+
+  // Mutation operations (DELETE, UPDATE, DEDUPE, etc.)
+  const rowLabel = result.operation === 'DEDUPE' ? 'Rows removed' : 'Rows affected';
+
   return (
     <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       <Metric
-        label="Rows removed"
+        label={rowLabel}
         value={result.rowsAffected.toLocaleString()}
         color={result.mismatch ? 'var(--attention)' : 'var(--positive)'}
       />

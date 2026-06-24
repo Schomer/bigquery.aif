@@ -1,21 +1,11 @@
 // src/lib/firestore-service.ts
-// Typed Firestore operations for all user-scoped app data.
-// All collections live under /users/{uid}/ — enforced by security rules.
+// Client-side Firestore operations using Firebase client SDK directly.
 
-import {
-  collection,
-  doc,
-  getDocs,
-  setDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  Timestamp,
-} from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteField, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { ChatMessage, CompositionEnvelope } from './types';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface SavedConversation {
   id: string;
@@ -24,12 +14,6 @@ export interface SavedConversation {
   updatedAt: string;
   project: string;
   messages: ChatMessage[];
-}
-
-/** Shape persisted in Firestore — messages are JSON-stringified to avoid
- *  Firestore's nested-array restriction (e.g. rows[][], referencedTables[] inside items[]). */
-interface PersistedConversation extends Omit<SavedConversation, 'messages'> {
-  messagesJson: string;
 }
 
 export interface FavoriteItem {
@@ -49,60 +33,60 @@ export interface SavedPrompt {
   category: 'Reporting' | 'Data Quality' | 'Schema' | 'Cost' | 'Other';
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function userCol(uid: string, colName: string) {
-  return collection(db, 'users', uid, colName);
+function userDoc(uid: string) {
+  return doc(db, 'users', uid);
 }
 
-function userDoc(uid: string, colName: string, docId: string) {
-  return doc(db, 'users', uid, colName, docId);
+async function getUserData(uid: string): Promise<any> {
+  const snap = await getDoc(userDoc(uid));
+  return snap.exists() ? snap.data() : {};
 }
 
-// ─── Conversations ────────────────────────────────────────────────────────────
+// ── Conversations ────────────────────────────────────────────────────────────
 
 export async function getConversations(uid: string): Promise<SavedConversation[]> {
-  const q = query(userCol(uid, 'conversations'), orderBy('updatedAt', 'desc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => {
-    const raw = d.data() as PersistedConversation & { messages?: ChatMessage[] };
-    // Support both legacy docs (messages[]) and new docs (messagesJson)
-    const messages: ChatMessage[] = raw.messagesJson
-      ? (JSON.parse(raw.messagesJson) as ChatMessage[])
-      : (raw.messages ?? []);
-    const { messagesJson: _omit, ...rest } = raw as PersistedConversation & { messages?: ChatMessage[] };
-    return { ...rest, messages } as SavedConversation;
+  const state = await getUserData(uid);
+  const convMap = state.conversations || {};
+  const conversations: SavedConversation[] = Object.entries(convMap).map(([id, data]: [string, any]) => {
+    const messages: ChatMessage[] = data.messagesJson
+      ? (JSON.parse(data.messagesJson) as ChatMessage[])
+      : (data.messages ?? []);
+    return { ...data, id, messages };
   });
+  return conversations.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
 export async function saveConversation(uid: string, conv: SavedConversation): Promise<void> {
   const { messages, ...rest } = conv;
-  const persisted: PersistedConversation = {
+  const persisted = {
     ...rest,
-    // Serialize messages to JSON string — avoids Firestore nested-array errors
-    // (e.g. QueryResult.rows[][], MonitoringJob.referencedTables[] inside items[])
     messagesJson: JSON.stringify(messages),
   };
-  await setDoc(userDoc(uid, 'conversations', conv.id), persisted);
+  await setDoc(userDoc(uid), {
+    conversations: { [conv.id]: persisted },
+  }, { merge: true });
 }
 
 export async function deleteConversation(uid: string, id: string): Promise<void> {
-  await deleteDoc(userDoc(uid, 'conversations', id));
+  await updateDoc(userDoc(uid), {
+    [`conversations.${id}`]: deleteField(),
+  });
 }
 
-// ─── Favorites ────────────────────────────────────────────────────────────────
+// ── Favorites ────────────────────────────────────────────────────────────────
 
 export async function getFavorites(uid: string): Promise<FavoriteItem[]> {
-  const q = query(userCol(uid, 'favorites'), orderBy('createdAt', 'desc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => {
-    const raw = d.data() as FavoriteItem & { envelopeJson?: string };
-    const envelope = raw.envelopeJson
-      ? (JSON.parse(raw.envelopeJson) as CompositionEnvelope)
-      : raw.envelope;
-    const { envelopeJson: _omit, ...rest } = raw;
-    return { ...rest, envelope } as FavoriteItem;
+  const state = await getUserData(uid);
+  const favMap = state.favorites || {};
+  const favorites: FavoriteItem[] = Object.entries(favMap).map(([id, data]: [string, any]) => {
+    const envelope = data.envelopeJson
+      ? (JSON.parse(data.envelopeJson) as CompositionEnvelope)
+      : data.envelope;
+    return { ...data, id, envelope };
   });
+  return favorites.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
 export async function addFavorite(uid: string, item: FavoriteItem): Promise<void> {
@@ -111,34 +95,68 @@ export async function addFavorite(uid: string, item: FavoriteItem): Promise<void
     ...rest,
     envelopeJson: envelope ? JSON.stringify(envelope) : null,
   };
-  await setDoc(userDoc(uid, 'favorites', item.id), persisted);
+  await setDoc(userDoc(uid), {
+    favorites: { [item.id]: persisted },
+  }, { merge: true });
 }
 
 export async function removeFavorite(uid: string, id: string): Promise<void> {
-  await deleteDoc(userDoc(uid, 'favorites', id));
+  await updateDoc(userDoc(uid), {
+    [`favorites.${id}`]: deleteField(),
+  });
 }
 
-
-// ─── Saved Prompts ────────────────────────────────────────────────────────────
+// ── Saved Prompts ────────────────────────────────────────────────────────────
 
 export async function getPrompts(uid: string): Promise<SavedPrompt[]> {
-  const q = query(userCol(uid, 'prompts'), orderBy('createdAt', 'desc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as SavedPrompt);
+  const state = await getUserData(uid);
+  const promptMap = state.prompts || {};
+  const prompts: SavedPrompt[] = Object.entries(promptMap).map(([id, data]: [string, any]) => {
+    return { ...data, id };
+  });
+  return prompts.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
 export async function savePrompt(uid: string, prompt: SavedPrompt): Promise<void> {
-  await setDoc(userDoc(uid, 'prompts', prompt.id), prompt);
+  await setDoc(userDoc(uid), {
+    prompts: { [prompt.id]: prompt },
+  }, { merge: true });
 }
 
 export async function deletePrompt(uid: string, id: string): Promise<void> {
-  await deleteDoc(userDoc(uid, 'prompts', id));
+  await updateDoc(userDoc(uid), {
+    [`prompts.${id}`]: deleteField(),
+  });
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
+// ── User Preferences ─────────────────────────────────────────────────────────
+
+export interface UserPreferences {
+  activeProject?: string;
+}
+
+export async function getUserPreferences(uid: string): Promise<UserPreferences> {
+  try {
+    const state = await getUserData(uid);
+    return state.preferences || {};
+  } catch (err) {
+    console.warn('[getUserPreferences]', err);
+    return {};
+  }
+}
+
+export async function saveUserPreferences(uid: string, prefs: Partial<UserPreferences>): Promise<void> {
+  try {
+    await setDoc(userDoc(uid), { preferences: prefs }, { merge: true });
+  } catch (err) {
+    console.warn('[saveUserPreferences]', err);
+  }
+}
+
+// ── Utilities ────────────────────────────────────────────────────────────────
 
 export function generateId(): string {
-  return doc(collection(db, '_')).id;
+  return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 export function nowISO(): string {
@@ -147,6 +165,6 @@ export function nowISO(): string {
 
 export function autoTitle(firstMessage: string): string {
   return firstMessage.length > 52
-    ? firstMessage.slice(0, 50).trim() + '…'
+    ? firstMessage.slice(0, 50).trim() + '...'
     : firstMessage.trim();
 }

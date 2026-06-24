@@ -5,9 +5,10 @@ import { useState } from 'react';
 
 interface Props {
   result: QueryResult;
+  onSendMessage?: (msg: string) => void;
 }
 
-export function DataTable({ result }: Props) {
+export function DataTable({ result, onSendMessage }: Props) {
   const [filter, setFilter] = useState('');
   const [sortCol, setSortCol] = useState<number | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -104,18 +105,50 @@ export function DataTable({ result }: Props) {
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 {row.map((cell, ci) => (
-                  <td key={ci} style={{
-                    padding: '7px 12px',
-                    color: typeof cell === 'number' ? 'var(--text)' : 'var(--text-muted)',
-                    fontFamily: typeof cell === 'number' ? 'var(--font-mono)' : 'inherit',
-                    whiteSpace: 'nowrap',
-                    maxWidth: 300,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
+                  <td
+                    key={ci}
+                    onClick={() => {
+                      if (cell !== null && cell !== undefined && onSendMessage) {
+                        const colLower = columns[ci].toLowerCase();
+                        const isEntityCol = /^(dataset|table|view|schema)[_\s]?(name|id)?$/.test(colLower)
+                          || colLower === 'table_catalog'
+                          || colLower === 'table_schema';
+                        if (isEntityCol) {
+                          onSendMessage(`Tell me more about ${cell}`);
+                        } else {
+                          const formattedValue = typeof cell === 'number' ? cell : `'${cell}'`;
+                          onSendMessage(`Filter the last query where \`${columns[ci]}\` = ${formattedValue}`);
+                        }
+                      }
+                    }}
+                    style={{
+                      padding: '7px 12px',
+                      color: typeof cell === 'number' ? 'var(--text)' : 'var(--text-muted)',
+                      fontFamily: typeof cell === 'number' ? 'var(--font-mono)' : 'inherit',
+                      whiteSpace: 'nowrap',
+                      maxWidth: 300,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.1s, color 0.1s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--accent-dim)';
+                      e.currentTarget.style.color = 'var(--accent-text)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.color = typeof cell === 'number' ? 'var(--text)' : 'var(--text-muted)';
+                    }}
+                    title={cell !== null && cell !== undefined
+                      ? (/^(dataset|table|view|schema)[_\s]?(name|id)?$/.test(columns[ci].toLowerCase()) || columns[ci].toLowerCase() === 'table_catalog' || columns[ci].toLowerCase() === 'table_schema'
+                        ? `Click to learn more about ${cell}`
+                        : `Click to filter where ${columns[ci]} = ${cell}`)
+                      : undefined}
+                  >
                     {cell === null || cell === undefined ? (
                       <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>null</span>
-                    ) : String(cell)}
+                    ) : typeof cell === 'object' ? JSON.stringify(cell) : String(cell)}
                   </td>
                 ))}
               </tr>
@@ -125,11 +158,16 @@ export function DataTable({ result }: Props) {
       </div>
 
       {/* Row count footer */}
-      <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'right' }}>
-        {filtered.length < rows.length
-          ? `${filtered.length} of ${rows.length} rows`
-          : `${rows.length} rows`}
-        {rows.length > 200 && ' (showing first 200)'}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--text-dim)' }}>
+        <span style={{ fontStyle: 'italic' }}>
+          Tip: Click any cell to explore further.
+        </span>
+        <span>
+          {filtered.length < rows.length
+            ? `${filtered.length} of ${rows.length} rows`
+            : `${rows.length} rows`}
+          {rows.length > 200 && ' (showing first 200)'}
+        </span>
       </div>
     </div>
   );

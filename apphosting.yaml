@@ -1,63 +1,21 @@
 runConfig:
-  cpu: 1
-  memoryMiB: 512
-  minInstances: 0
-  maxInstances: 10
+  runtime: nodejs22
   concurrency: 80
+  cpu: 1
+  memoryMiB: 1024
+  minInstances: 0
+  maxInstances: 3
 
 env:
-  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    secret: firebase-api-key
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: malloy-data.firebaseapp.com
-    availability:
-      - BUILD
-      - RUNTIME
+  - variable: GOOGLE_CLIENT_ID
+    value: 347391727005-up3qo24398bpskrpfds79usrptbsv26m.apps.googleusercontent.com
+  - variable: GOOGLE_CLIENT_SECRET
+    secret: bigquery-aif-oauth-secret
+  - variable: GOOGLE_REDIRECT_URI
+    value: https://hey-data-builder.web.app/api/auth/callback
+  - variable: FRONTEND_URL
+    value: https://hey-data-builder.web.app
+  - variable: GOOGLE_CLOUD_PROJECT
+    value: malloy-data
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: malloy-data
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: 1:347391727005:web:421bbe9d620558667e0b74
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    value: "347391727005"
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID
-    secret: google-oauth-client-id
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: NEXT_PUBLIC_GOOGLE_PROJECT_ID
-    value: malloy-data
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: GOOGLE_PROJECT_ID
-    value: malloy-data
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: BQ_DATASET
-    value: ecomm
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: GOOGLE_GENERATIVE_AI_API_KEY
-    secret: google-generative-ai-api-key
-    availability:
-      - BUILD
-      - RUNTIME
-  - variable: GOOGLE_AI_API_KEY
-    secret: google-generative-ai-api-key
-    availability:
-      - BUILD
-      - RUNTIME

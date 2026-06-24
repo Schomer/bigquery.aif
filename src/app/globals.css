@@ -527,11 +527,12 @@
 .gc-nav-label { overflow: hidden; text-overflow: ellipsis; }
 
 /* Collapsed nav items */
+.gc-side-nav--collapsed .gc-nav-section { padding: 4px 0; }
 .gc-side-nav--collapsed .gc-nav-item-row { justify-content: center; }
 .gc-side-nav--collapsed .gc-nav-item {
   justify-content: center; padding: 0; flex: 0 0 auto;
   border-radius: 50%; width: 40px; height: 40px;
-  margin: 2px auto; border-left: none;
+  margin: 2px auto; border-left: none; overflow: visible;
 }
 .gc-side-nav--collapsed .gc-nav-label { display: none; }
 
@@ -557,6 +558,7 @@
   border-top: 1px solid var(--gc-border);
   padding: 8px 8px 8px 0; flex-shrink: 0;
 }
+.gc-side-nav--collapsed .gc-nav-bottom { padding: 8px 0; }
 .gc-side-nav--collapsed .gc-nav-bottom .gc-nav-item {
   justify-content: center; padding: 0;
   border-radius: 50%; width: 40px; height: 40px;
@@ -777,3 +779,20 @@
   color: var(--text-muted);
   font-family: 'Google Sans', 'Inter', sans-serif;
 }
+
+/* Recharts interactive elements */
+.recharts-bar-rectangle,
+.recharts-pie-sector,
+.recharts-line-dot,
+.recharts-active-dot,
+.recharts-scatter-symbol {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.recharts-bar-rectangle:hover,
+.recharts-pie-sector:hover,
+.recharts-active-dot:hover,
+.recharts-scatter-symbol:hover {
+  opacity: 0.8;
+}
+

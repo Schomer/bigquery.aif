@@ -1,0 +1,219 @@
+{
+  "Description": "Three major changes: (A) Made the multistep planner much more conservative -- single-intent requests always route as single-turn, multistep only triggers on explicit multi-action language. (B) Added onStatus callback throughout the orchestration pipeline so the UI can show real-time status updates during processing. (C) Added resultSummary field to query responses so Gemini provides a headline for query results.",
+  "Instruction": "Apply Changes A, B, and C: 1) Add onStatus to ProcessMessageArgs, 2) Rewrite planner prompt to be conservative, 3) Add resultSummary to QueryResponseSchema, 4) Thread onStatus through processMessage and all handlers, 5) Update query system instruction for resultSummary, 6) Pass resultSummary through to results.",
+  "ReplacementChunks": [
+    {
+      "AllowMultiple": false,
+      "EndLine": 226,
+      "ReplacementContent": "const QueryResponseSchema = {\n  type: 'OBJECT',\n  properties: {\n    sql: { type: 'STRING' },\n    suggestedVisualization: { type: 'STRING', enum: ['TABLE', 'LINE_CHART', 'BAR_CHART', 'AREA_CHART', 'SCATTER', 'PIE_CHART', 'KPI_CARD'] },\n    xAxis: { type: 'STRING' },\n    yAxis: { type: 'ARRAY', items: { type: 'STRING' } },\n    notableFindings: { type: 'STRING' },\n    resultSummary: { type: 'STRING' }\n  },\n  required: ['sql', 'suggestedVisualization']\n};",
+      "StartLine": 216,
+      "TargetContent": "const QueryResponseSchema = {\n  type: 'OBJECT',\n  properties: {\n    sql: { type: 'STRING' },\n    suggestedVisualization: { type: 'STRING', enum: ['TABLE', 'LINE_CHART', 'BAR_CHART', 'AREA_CHART', 'SCATTER', 'PIE_CHART', 'KPI_CARD'] },\n    xAxis: { type: 'STRING' },\n    yAxis: { type: 'ARRAY', items: { type: 'STRING' } },\n    notableFindings: { type: 'STRING' }\n  },\n  required: ['sql', 'suggestedVisualization']\n};"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 333,
+      "ReplacementContent": "export interface ProcessMessageArgs {\n  message: string;\n  history: ChatMessage[];\n  context?: {\n    lastSkill?: SkillName;\n    lastResultRef?: string;\n    lastTable?: string;\n    dataset?: string;\n    project?: string;\n    confirmedPayload?: DataManagementResult;\n    forcedSkill?: SkillName;\n  };\n  onStatus?: (status: string) => void;\n}",
+      "StartLine": 321,
+      "TargetContent": "export interface ProcessMessageArgs {\n  message: string;\n  history: ChatMessage[];\n  context?: {\n    lastSkill?: SkillName;\n    lastResultRef?: string;\n    lastTable?: string;\n    dataset?: string;\n    project?: string;\n    confirmedPayload?: DataManagementResult;\n    forcedSkill?: SkillName;\n  };\n}"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 341,
+      "ReplacementContent": "  static async processMessage({ message, history, context, onStatus }: ProcessMessageArgs): Promise<OrchestrationResult> {",
+      "StartLine": 341,
+      "TargetContent": "  static async processMessage({ message, history, context }: ProcessMessageArgs): Promise<OrchestrationResult> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 384,
+      "ReplacementContent": "    if (!context?.forcedSkill) {\n      try {\n        const dataset = await resolveDefaultDataset(project, context?.dataset);\n        const available = await getAvailableDatasets(project);\n        const messages = history.slice(-6).map((m) => ({\n          role: m.role as 'user' | 'assistant',\n          content: m.content,\n        }));\n\n        onStatus?.('Classifying request...');\n\n        const planPrompt = `You are the workflow planner for a BigQuery AI assistant.\nYour job is to decide if a user message requires MULTIPLE DISTINCT ACTIONS or just ONE.\n\nCRITICAL RULES:\n- A request with ONE VERB acting on ONE OBJECT is NEVER multistep, even if the skill internally does multiple things.\n- Single-intent requests MUST return isMultistep: false with an empty steps array.\n- Only return isMultistep: true when the message contains EXPLICIT multi-action language such as: 'and then', 'after that', 'first...then', 'followed by', 'next', or a numbered list of distinct actions.\n\nExamples that are NOT multistep (return isMultistep: false):\n- 'list my datasets' (one action: list)\n- 'show me the orders table' (one action: describe)\n- 'profile the users table' (one action: profile)\n- 'how many rows in orders' (one action: query)\n- 'what are the most expensive queries' (one action: monitoring)\n- 'find tables with customer data' (one action: search)\n- 'deduplicate the events table' (one action: dedupe)\n- 'check for nulls in the users table' (one action: null check)\n- 'export the orders table as CSV' (one action: export)\n\nExamples that ARE multistep (return isMultistep: true):\n- 'profile the users table and then deduplicate it' (two actions: profile, then dedupe)\n- 'first check for duplicates in orders, then delete them' (two actions: check, then delete)\n- 'create a view of active users and then export it as CSV' (two actions: create view, then export)\n- '1. list tables in ecomm 2. profile the orders table 3. check for nulls' (three actions)\n\nIf isMultistep is true, decompose into steps. Each step maps to one skill:\n1. 'schema': listing datasets/tables, describing columns/schema.\n2. 'query': running SELECT queries, aggregations, statistics.\n3. 'data-management': modifying tables (DEDUPE, DELETE, UPDATE, CREATE_TABLE, CREATE_VIEW, etc.).\n4. 'data-quality': profiling tables, checking nulls/duplicates/freshness.\n5. 'discovery': searching tables/views or comparing two tables.\n6. 'monitoring': checking query history, cost, performance, recent jobs.\n7. 'data-loading': exporting data, downloading CSVs, scheduling queries.\n\nEach step's 'prompt' field must be FULLY SELF-CONTAINED: include explicit fully-qualified table names (e.g. \\`${project}.${dataset}.tablename\\`), dataset names, and specific operation types (e.g. checkType: DUPLICATES). No vague descriptions like 'clean up the table' -- be specific.\nEach step's 'description' should be a short user-facing label (e.g. 'Check duplicates in ${project}.${dataset}.orders').\n\nCurrent active project: ${project}\nCurrent active dataset: ${dataset}\nAvailable datasets: ${available.join(', ')}`;",
+      "StartLine": 353,
+      "TargetContent": "    if (!context?.forcedSkill) {\n      try {\n        const dataset = await resolveDefaultDataset(project, context?.dataset);\n        const available = await getAvailableDatasets(project);\n        const messages = history.slice(-6).map((m) => ({\n          role: m.role as 'user' | 'assistant',\n          content: m.content,\n        }));\n\n        const planPrompt = `You are the workflow planner for a BigQuery AI assistant.\nAnalyze the user's message and determine if it represents a multi-step workflow.\nA multi-step workflow is a request that asks to do multiple sequential or parallel actions, such as:\n- Listing or finding tables and then checking their schema or query counts.\n- Checking data quality (duplicates/nulls) and then deleting/updating rows.\n- Creating a table/view and then profiling or querying it.\n- Querying data and then exporting/downloading it.\n\nIf the request is simple and can be completed in a single action (e.g. just running one query, showing the schema of a specific table, or doing a single data clean-up operation), set isMultistep to false and return an empty steps array.\n\nIf it is a multi-step task, set isMultistep to true and decompose it into a sequence of steps. Each step must map to one of the following skills:\n1. 'schema': For listing datasets, tables, or describing a specific table's columns/schema.\n2. 'query': For running any SELECT query, grouping, aggregation, calculating statistics.\n3. 'data-management': For modifying tables (DEDUPE, DELETE, UPDATE, CREATE_TABLE, CREATE_VIEW, etc.).\n4. 'data-quality': For profiling tables, checking nulls, checking duplicates, or checking freshness.\n5. 'discovery': For searching tables/views or comparing two tables.\n6. 'monitoring': For checking query history, cost, performance, or recent jobs.\n7. 'data-loading': For exporting data, downloading CSVs, or scheduling queries.\n\nProvide a clear user-facing description for each step (e.g., 'Deduplicate user profiles table') and a self-contained prompt to be run for that step. Make sure prompts are self-contained and explicitly mention table names.\nCurrent active project: ${project}\nCurrent active dataset: ${dataset}\nAvailable datasets: ${available.join(', ')}`;"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 427,
+      "ReplacementContent": "    let skill = context?.forcedSkill;\n    if (!skill) {\n      const routerOutput = classifyIntent(resolvedMessage, context);\n      skill = routerOutput.skill;\n    }\n\n    const skillLabels: Record<string, string> = {\n      'schema': 'schema lookup',\n      'query': 'query builder',\n      'data-management': 'data management',\n      'data-quality': 'data quality check',\n      'monitoring': 'monitoring',\n      'discovery': 'discovery search',\n      'data-loading': 'data export',\n    };\n    onStatus?.(`Routing to ${skillLabels[skill] || skill}...`);",
+      "StartLine": 423,
+      "TargetContent": "    let skill = context?.forcedSkill;\n    if (!skill) {\n      const routerOutput = classifyIntent(resolvedMessage, context);\n      skill = routerOutput.skill;\n    }"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 456,
+      "ReplacementContent": "      case 'schema':\n        envelopes = await handleSchema(resolvedMessage, context, onStatus);\n        break;\n      case 'query':\n        envelopes = await handleQuery(resolvedMessage, history, context, onStatus);\n        break;\n      case 'data-management':\n        envelopes = await handleDataManagement(resolvedMessage, history, context, onStatus);\n        break;\n      case 'data-quality':\n        envelopes = await handleDataQuality(resolvedMessage, context, onStatus);\n        break;\n      case 'monitoring':\n        envelopes = await handleMonitoring(resolvedMessage, context, onStatus);\n        break;\n      case 'discovery':\n        envelopes = await handleDiscovery(resolvedMessage, context, onStatus);\n        break;\n      case 'data-loading':\n        envelopes = await handleDataLoading(resolvedMessage, context, onStatus);\n        break;\n      default:\n        envelopes = await handleQuery(resolvedMessage, history, context, onStatus);\n    }",
+      "StartLine": 433,
+      "TargetContent": "      case 'schema':\n        envelopes = await handleSchema(resolvedMessage, context);\n        break;\n      case 'query':\n        envelopes = await handleQuery(resolvedMessage, history, context);\n        break;\n      case 'data-management':\n        envelopes = await handleDataManagement(resolvedMessage, history, context);\n        break;\n      case 'data-quality':\n        envelopes = await handleDataQuality(resolvedMessage, context);\n        break;\n      case 'monitoring':\n        envelopes = await handleMonitoring(resolvedMessage, context);\n        break;\n      case 'discovery':\n        envelopes = await handleDiscovery(resolvedMessage, context);\n        break;\n      case 'data-loading':\n        envelopes = await handleDataLoading(resolvedMessage, context);\n        break;\n      default:\n        envelopes = await handleQuery(resolvedMessage, history, context);\n    }"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 495,
+      "ReplacementContent": "async function handleSchema(\n  message: string,\n  context?: { project?: string; dataset?: string },\n  onStatus?: (status: string) => void\n): Promise<CompositionEnvelope[]> {",
+      "StartLine": 492,
+      "TargetContent": "async function handleSchema(\n  message: string,\n  context?: { project?: string; dataset?: string }\n): Promise<CompositionEnvelope[]> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 503,
+      "ReplacementContent": "  onStatus?.('Analyzing request...');\n  const intent = await callGemini({\n    systemInstruction: `${skillDoc}\\n\\nExtract the requested scope from the user's message. Dataset and table should be the BigQuery identifiers mentioned. If none mentioned, return null. The active project is: ${project}${context?.dataset ? `. The active dataset context is: ${context.dataset}` : ''}.`,\n    prompt: message,\n    schema: SchemaResponseSchema,\n  });",
+      "StartLine": 499,
+      "TargetContent": "  const intent = await callGemini({\n    systemInstruction: `${skillDoc}\\n\\nExtract the requested scope from the user's message. Dataset and table should be the BigQuery identifiers mentioned. If none mentioned, return null. The active project is: ${project}${context?.dataset ? `. The active dataset context is: ${context.dataset}` : ''}.`,\n    prompt: message,\n    schema: SchemaResponseSchema,\n  });"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 509,
+      "ReplacementContent": "  onStatus?.('Fetching schema...');\n  const result = await fetchSchema(\n    intent.dataset ?? context?.dataset ?? undefined,\n    intent.table ?? undefined,\n    project,\n  );",
+      "StartLine": 505,
+      "TargetContent": "  const result = await fetchSchema(\n    intent.dataset ?? context?.dataset ?? undefined,\n    intent.table ?? undefined,\n    project,\n  );"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 521,
+      "ReplacementContent": "async function handleQuery(\n  message: string,\n  history: ChatMessage[],\n  context?: { project?: string; dataset?: string; lastTable?: string },\n  onStatus?: (status: string) => void\n): Promise<CompositionEnvelope[]> {",
+      "StartLine": 517,
+      "TargetContent": "async function handleQuery(\n  message: string,\n  history: ChatMessage[],\n  context?: { project?: string; dataset?: string; lastTable?: string }\n): Promise<CompositionEnvelope[]> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 545,
+      "ReplacementContent": "  onStatus?.('Building SQL query...');\n  const queryPlan = await callGemini({\n    systemInstruction: `${skillDoc}\n\nThe BigQuery project is: ${project}\nThe default dataset is: ${dataset}\nThe available datasets in project ${project} are: ${available.join(', ')}\n${schemaContext}\nAlways wrap fully qualified table references in literal backticks: \\`${project}.${dataset}.tablename\\` (e.g. \\`${project}.${dataset}.orders\\`). This is CRITICAL to prevent syntax errors when project names contain dashes/hyphens.\nToday's date is: ${new Date().toISOString().split('T')[0]}\nAlso generate a resultSummary field: a brief, contextual one-line summary of what the query results likely show (e.g., 'Revenue by month for the last 12 months' or 'Top 10 customers by order count'). This will be used as the headline shown to the user.`,\n    messages: [...messages, { role: 'user' as const, content: message }],\n    schema: QueryResponseSchema,\n  });",
+      "StartLine": 534,
+      "TargetContent": "  const queryPlan = await callGemini({\n    systemInstruction: `${skillDoc}\n\nThe BigQuery project is: ${project}\nThe default dataset is: ${dataset}\nThe available datasets in project ${project} are: ${available.join(', ')}\n${schemaContext}\nAlways wrap fully qualified table references in literal backticks: \\`${project}.${dataset}.tablename\\` (e.g. \\`${project}.${dataset}.orders\\`). This is CRITICAL to prevent syntax errors when project names contain dashes/hyphens.\nToday's date is: ${new Date().toISOString().split('T')[0]}`,\n    messages: [...messages, { role: 'user' as const, content: message }],\n    schema: QueryResponseSchema,\n  });"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 547,
+      "ReplacementContent": "  onStatus?.('Checking query cost...');\n  const costResult = await dryRun(queryPlan.sql, project);",
+      "StartLine": 547,
+      "TargetContent": "  const costResult = await dryRun(queryPlan.sql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 570,
+      "ReplacementContent": "  onStatus?.('Executing query...');\n  const executed = await executeQuery(queryPlan.sql, project);",
+      "StartLine": 570,
+      "TargetContent": "  const executed = await executeQuery(queryPlan.sql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 586,
+      "ReplacementContent": "    notableFindings: queryPlan.notableFindings ?? null,\n    resultSummary: queryPlan.resultSummary ?? null,\n  };",
+      "StartLine": 585,
+      "TargetContent": "    notableFindings: queryPlan.notableFindings ?? null,\n  };"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 597,
+      "ReplacementContent": "async function handleDataManagement(\n  message: string,\n  history: ChatMessage[],\n  context?: { project?: string; dataset?: string },\n  onStatus?: (status: string) => void\n): Promise<CompositionEnvelope[]> {",
+      "StartLine": 593,
+      "TargetContent": "async function handleDataManagement(\n  message: string,\n  history: ChatMessage[],\n  context?: { project?: string; dataset?: string }\n): Promise<CompositionEnvelope[]> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 610,
+      "ReplacementContent": "  onStatus?.('Planning operation...');\n  const plan = await callGemini({",
+      "StartLine": 610,
+      "TargetContent": "  const plan = await callGemini({"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 623,
+      "ReplacementContent": "  // Run preview query\n  onStatus?.('Running preview...');\n  const previewResult = await executeQuery(plan.previewSql, project);",
+      "StartLine": 622,
+      "TargetContent": "  // Run preview query\n  const previewResult = await executeQuery(plan.previewSql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 683,
+      "ReplacementContent": "  // Cost estimate\n  onStatus?.('Estimating cost...');\n  const costResult = await dryRun(plan.executionSql, project);",
+      "StartLine": 682,
+      "TargetContent": "  // Cost estimate\n  const costResult = await dryRun(plan.executionSql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 740,
+      "ReplacementContent": "async function handleMonitoring(\n  _message: string,\n  context?: { project?: string },\n  onStatus?: (status: string) => void\n): Promise<CompositionEnvelope[]> {",
+      "StartLine": 737,
+      "TargetContent": "async function handleMonitoring(\n  _message: string,\n  context?: { project?: string }\n): Promise<CompositionEnvelope[]> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 744,
+      "ReplacementContent": "  onStatus?.('Fetching job history...');\n  const executed = await executeQuery(sql, project);",
+      "StartLine": 744,
+      "TargetContent": "  const executed = await executeQuery(sql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 823,
+      "ReplacementContent": "async function handleDataQuality(\n  message: string,\n  context?: { project?: string; dataset?: string; lastTable?: string },\n  onStatus?: (status: string) => void\n): Promise<CompositionEnvelope[]> {",
+      "StartLine": 820,
+      "TargetContent": "async function handleDataQuality(\n  message: string,\n  context?: { project?: string; dataset?: string; lastTable?: string }\n): Promise<CompositionEnvelope[]> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 828,
+      "ReplacementContent": "  onStatus?.('Classifying check type...');\n  const intent = await callGemini({",
+      "StartLine": 828,
+      "TargetContent": "  const intent = await callGemini({"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 889,
+      "ReplacementContent": "    sql = `SELECT ${keyCol}, COUNT(*) as duplicate_count FROM ${fqTable} GROUP BY ${keyCol} HAVING COUNT(*) > 1 ORDER BY duplicate_count DESC LIMIT 50`;\n    onStatus?.('Running quality checks...');\n    const executed = await executeQuery(sql, project);",
+      "StartLine": 888,
+      "TargetContent": "    sql = `SELECT ${keyCol}, COUNT(*) as duplicate_count FROM ${fqTable} GROUP BY ${keyCol} HAVING COUNT(*) > 1 ORDER BY duplicate_count DESC LIMIT 50`;\n    const executed = await executeQuery(sql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 921,
+      "ReplacementContent": "  sql = `SELECT COUNT(*) AS __total_rows, ${exprs.join(', ')} FROM ${fqTable}`;\n  onStatus?.('Running quality checks...');\n  const executed = await executeQuery(sql, project);",
+      "StartLine": 920,
+      "TargetContent": "  sql = `SELECT COUNT(*) AS __total_rows, ${exprs.join(', ')} FROM ${fqTable}`;\n  const executed = await executeQuery(sql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 953,
+      "ReplacementContent": "async function handleDataLoading(\n  message: string,\n  context?: { project?: string; dataset?: string; lastTable?: string },\n  onStatus?: (status: string) => void\n): Promise<CompositionEnvelope[]> {",
+      "StartLine": 950,
+      "TargetContent": "async function handleDataLoading(\n  message: string,\n  context?: { project?: string; dataset?: string; lastTable?: string }\n): Promise<CompositionEnvelope[]> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 960,
+      "ReplacementContent": "  onStatus?.('Analyzing export request...');\n  const intent = await callGemini({",
+      "StartLine": 960,
+      "TargetContent": "  const intent = await callGemini({"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 1000,
+      "ReplacementContent": "  onStatus?.('Preparing export...');\n  const executed = await executeQuery(sql, project);",
+      "StartLine": 1000,
+      "TargetContent": "  const executed = await executeQuery(sql, project);"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 1030,
+      "ReplacementContent": "async function handleDiscovery(\n  message: string,\n  context?: { project?: string; dataset?: string },\n  onStatus?: (status: string) => void\n): Promise<CompositionEnvelope[]> {",
+      "StartLine": 1027,
+      "TargetContent": "async function handleDiscovery(\n  message: string,\n  context?: { project?: string; dataset?: string }\n): Promise<CompositionEnvelope[]> {"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 1034,
+      "ReplacementContent": "  onStatus?.('Analyzing search request...');\n  const intent = await callGemini({",
+      "StartLine": 1034,
+      "TargetContent": "  const intent = await callGemini({"
+    },
+    {
+      "AllowMultiple": false,
+      "EndLine": 1102,
+      "ReplacementContent": "  onStatus?.('Searching across datasets...');\n  await Promise.all(",
+      "StartLine": 1102,
+      "TargetContent": "  await Promise.all("
+    }
+  ],
+  "TargetFile": "/Users/schomer/Desktop/DATA APPS/bigquery-aif/src/lib/chat-orchestrator.ts",
+  "toolAction": "Applying all orchestrator changes",
+  "toolSummary": "Orchestrator changes A B C"
+}

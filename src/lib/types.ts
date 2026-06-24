@@ -10,7 +10,8 @@ export type SkillName =
   | 'data-quality'
   | 'discovery'
   | 'monitoring'
-  | 'data-loading';
+  | 'data-loading'
+  | 'multistep';
 
 // ─── Handoff envelope (bigquery-shared-harness-policies.md §B) ───────────────
 
@@ -57,7 +58,8 @@ export type ArtifactType =
   | 'DATA_QUALITY_VIEW'
   | 'DATA_LOADING_VIEW'
   | 'MONITORING_VIEW'
-  | 'DISCOVERY_VIEW';
+  | 'DISCOVERY_VIEW'
+  | 'MULTISTEP_VIEW';
 
 export interface CompositionEnvelope {
   id: string; // unique per response, used as sourceResultRef
@@ -84,6 +86,7 @@ export interface CompositionEnvelope {
   };
   nextActions: HandoffEnvelope[];
   requiresConfirmation?: boolean;
+  insight?: string | null;
 }
 
 // ─── Schema normalized result (bigquery-skill-schema.md §5) ──────────────────
@@ -146,6 +149,7 @@ export interface QueryResult {
   xAxis?: string | null;
   yAxis?: string[] | null;
   notableFindings?: string | null;
+  resultSummary?: string | null;
 }
 
 // ─── Data Management normalized result (bigquery-skill-data-management.md) ───
@@ -192,6 +196,7 @@ export interface DataManagementCompleteResult {
   mismatchNote?: string | null;
   schemaInvalidated: string[];
   jobId?: string;
+  completionMessage?: string | null;
 }
 
 export type DataManagementResult =

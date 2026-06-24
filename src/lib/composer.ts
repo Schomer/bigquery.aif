@@ -59,14 +59,14 @@ export function compose(
 function composeSchema(result: SchemaResult): CompositionEnvelope {
   const id = randomUUID();
   let headlineText = '';
-  let tone: Tone = 'NEUTRAL';
+  const tone: Tone = 'NEUTRAL';
   let basis: HeadlineBasis = 'STATUS';
-  let artifactType: ArtifactType = 'SCHEMA_VIEW';
+  const artifactType: ArtifactType = 'SCHEMA_VIEW';
   const nextActions: HandoffEnvelope[] = [];
 
   if (result.scope === 'PROJECT') {
     const count = result.columns.length;
-    headlineText = `Found ${count} dataset${count !== 1 ? 's' : ''} in ${result.project}`;
+    headlineText = `Found ${count} dataset${count !== 1 ? 's' : ''}`;
     // Add a chip for each dataset (up to 4) so the user can drill in immediately
     result.columns.slice(0, 4).forEach((ds) => {
       nextActions.push({
@@ -161,11 +161,10 @@ function composeQuery(result: QueryResult): CompositionEnvelope {
   }
 
   // Normal result
-  const tone: Tone = result.notableFindings ? 'ATTENTION' : 'NEUTRAL';
-  const basis: HeadlineBasis = result.notableFindings ? 'DEVIATION' : 'STATUS';
-  const headlineText =
-    result.notableFindings ??
-    buildQueryHeadline(result.rowCount, result.sql);
+  const tone: Tone = 'NEUTRAL';
+  const basis: HeadlineBasis = 'STATUS';
+  const headlineText = (result as any).resultSummary || buildQueryHeadline(result.rowCount, result.sql);
+  const insight = result.notableFindings ?? null;
 
   const artifactType = vizTypeToArtifactType(result.suggestedVisualization);
 
@@ -212,6 +211,7 @@ function composeQuery(result: QueryResult): CompositionEnvelope {
       },
     },
     nextActions,
+    insight,
   };
 }
 
@@ -226,9 +226,13 @@ function composeDataManagement(
     // Confirmation card
     let headlineText = '';
     if (result.operation === 'DEDUPE') {
-      headlineText = `Found ${result.affectedRowCount} duplicate rows across ${result.affectedGroupCount} groups — I'll keep the most recently updated copy of each`;
+      const dupeCount = Number.isFinite(result.affectedRowCount) ? Math.round(result.affectedRowCount).toLocaleString() : 'some';
+      headlineText = `Found ${dupeCount} duplicate rows across ${result.affectedGroupCount ?? 0} groups -- I'll keep the most recently updated copy of each`;
     } else {
-      headlineText = `This will affect ${result.affectedRowCount?.toLocaleString()} rows. Review the preview and confirm.`;
+      const count = Number.isFinite(result.affectedRowCount)
+        ? Math.round(result.affectedRowCount).toLocaleString()
+        : 'an unknown number of';
+      headlineText = `This will affect ${count} rows. Review the preview and confirm.`;
     }
 
     return {
@@ -247,9 +251,16 @@ function composeDataManagement(
   } else {
     // Completion card
     const tone: Tone = result.mismatch ? 'ATTENTION' : 'NEUTRAL';
-    const headlineText = result.mismatch
-      ? (result.mismatchNote ?? `Completed with unexpected result`)
-      : `Done — ${result.operation === 'DEDUPE' ? `removed ${result.rowsAffected} duplicate rows` : `${result.rowsAffected} rows affected`}`;
+    let headlineText: string;
+    if (result.mismatch) {
+      headlineText = result.mismatchNote ?? `Completed with unexpected result`;
+    } else if (result.completionMessage) {
+      headlineText = result.completionMessage;
+    } else if (result.operation === 'DEDUPE') {
+      headlineText = `Done — removed ${result.rowsAffected} duplicate rows`;
+    } else {
+      headlineText = `Done — ${result.rowsAffected} rows affected`;
+    }
 
     const nextActions: HandoffEnvelope[] = [
       {
@@ -295,9 +306,18 @@ function composeMonitoring(result: MonitoringResult): CompositionEnvelope {
   const { summary, items } = result;
 
   const tone: Tone = summary.errorCount > 0 ? 'ATTENTION' : 'NEUTRAL';
-  const headlineText = summary.errorCount > 0
-    ? `${summary.totalJobs} jobs in the last 24h — ${summary.errorCount} failed`
-    : `${summary.totalJobs} jobs in the last 24h — ${formatBytes(summary.totalBytesProcessed)} processed`;
+  let headlineText: string;
+  if (summary.errorCount > 0) {
+    const errorTypes = items.filter(j => j.status === 'ERROR');
+    const uniqueErrors = new Set(errorTypes.map(j => j.statementType)).size;
+    if (uniqueErrors === 1 && errorTypes.length > 1) {
+      headlineText = `${summary.errorCount} failed ${errorTypes[0].statementType} jobs in the last 24h (${summary.totalJobs} total)`;
+    } else {
+      headlineText = `${summary.errorCount} failed job${summary.errorCount !== 1 ? 's' : ''} out of ${summary.totalJobs} in the last 24h`;
+    }
+  } else {
+    headlineText = `${summary.totalJobs} jobs in the last 24h -- all successful, ${formatBytes(summary.totalBytesProcessed)} processed`;
+  }
 
   const nextActions: HandoffEnvelope[] = [];
 
@@ -367,10 +387,19 @@ function composeDiscovery(result: DiscoveryResult): CompositionEnvelope {
     }
   } else {
     const count = result.results.length;
-    headlineText = count > 0
-      ? `Found ${count} result${count !== 1 ? 's' : ''} for "${result.query}"`
-      : `No results found for "${result.query}"`;
-    if (count === 0) tone = 'ATTENTION';
+    if (count > 0) {
+      const tableCount = result.results.filter(r => r.type === 'TABLE').length;
+      const viewCount = result.results.filter(r => r.type === 'VIEW').length;
+      const parts: string[] = [];
+      if (tableCount > 0) parts.push(`${tableCount} table${tableCount !== 1 ? 's' : ''}`);
+      if (viewCount > 0) parts.push(`${viewCount} view${viewCount !== 1 ? 's' : ''}`);
+      headlineText = parts.length > 0
+        ? `Found ${parts.join(' and ')} matching "${result.query}"`
+        : `Found ${count} result${count !== 1 ? 's' : ''} matching "${result.query}"`;
+    } else {
+      headlineText = `No tables or views found matching "${result.query}"`;
+      tone = 'ATTENTION';
+    }
   }
 
   const nextActions: HandoffEnvelope[] = [];
@@ -461,7 +490,10 @@ function extractTableFromSql(sql: string): string | null {
 }
 
 function buildQueryHeadline(rowCount: number, sql: string): string {
-  const count = rowCount?.toLocaleString() ?? '0';
+  if (!rowCount || rowCount === 0) {
+    return 'Query returned no results -- try broadening your criteria or checking the table name';
+  }
+  const count = rowCount.toLocaleString();
   const rowWord = rowCount === 1 ? 'row' : 'rows';
   const table = extractTableFromSql(sql);
   if (table) {
@@ -476,9 +508,32 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
   const id = randomUUID();
   const { summary } = result;
   const tone: Tone = summary.issuesFound > 0 ? 'ATTENTION' : 'NEUTRAL';
-  const headlineText = summary.issuesFound > 0
-    ? `${summary.issuesFound} issue${summary.issuesFound !== 1 ? 's' : ''} found in \`${result.table.split('.').pop()}\``
-    : `\`${result.table.split('.').pop()}\` looks clean — no issues found`;
+  let headlineText: string;
+  if (summary.issuesFound === 0) {
+    headlineText = `\`${result.table.split('.').pop()}\` looks clean -- no issues found`;
+  } else {
+    const highNullCols = result.findings.filter(f => f.metric === 'null_rate' && Number(f.value) > 0.5);
+    const warningNullCols = result.findings.filter(f => f.metric === 'null_rate' && Number(f.value) > 0.1 && Number(f.value) <= 0.5);
+    const dupeFindings = result.findings.filter(f => f.metric === 'duplicate_groups' && Number(f.value) > 0);
+
+    const parts: string[] = [];
+    if (highNullCols.length > 0) {
+      parts.push(`${highNullCols.length} column${highNullCols.length !== 1 ? 's' : ''} with >50% nulls`);
+    }
+    if (warningNullCols.length > 0) {
+      parts.push(`${warningNullCols.length} column${warningNullCols.length !== 1 ? 's' : ''} with >10% nulls`);
+    }
+    if (dupeFindings.length > 0) {
+      const dupeCount = Number(dupeFindings[0].value);
+      parts.push(`${dupeCount.toLocaleString()} duplicate group${dupeCount !== 1 ? 's' : ''}`);
+    }
+
+    if (parts.length > 0) {
+      headlineText = `\`${result.table.split('.').pop()}\`: ${parts.join(', ')}`;
+    } else {
+      headlineText = `${summary.issuesFound} issue${summary.issuesFound !== 1 ? 's' : ''} found in \`${result.table.split('.').pop()}\``;
+    }
+  }
 
   const nextActions: HandoffEnvelope[] = [];
   const hasDupes = result.findings.some((f) => f.metric === 'duplicate_groups' && Number(f.value) > 0);
@@ -524,7 +579,7 @@ function composeDataLoading(result: DataLoadingResult): CompositionEnvelope {
   const tone: Tone = 'NEUTRAL';
 
   if (result.operationType === 'EXPORT_CSV' && result.rowCount !== undefined) {
-    headlineText = `${result.rowCount.toLocaleString()} rows ready to download`;
+    headlineText = `${result.rowCount.toLocaleString()} rows${result.columnCount ? ` across ${result.columnCount} columns` : ''} ready to download`;
   } else if (result.operationType === 'SCHEDULE_INFO') {
     headlineText = 'Scheduling information';
   }

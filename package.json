@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev --port 5800",
     "build": "next build",
-    "start": "next start --port 5800",
+    "start": "next start --port ${PORT:-5800}",
     "lint": "eslint",
+    "watch:build": "/Users/schomer/.nvm/versions/node/v24.16.0/bin/node scripts/watch-build.mjs",
     "test:auth": "/Users/schomer/.nvm/versions/node/v24.16.0/bin/node scripts/auth-setup.mjs",
     "test:setup": "/Users/schomer/.nvm/versions/node/v24.16.0/bin/node scripts/setup-reference-dataset.mjs",
     "test:run": "/Users/schomer/.nvm/versions/node/v24.16.0/bin/node scripts/test-loop.mjs",
@@ -15,11 +16,7 @@
     "test:all": "/Users/schomer/.nvm/versions/node/v24.16.0/bin/node scripts/test-loop.mjs && /Users/schomer/.nvm/versions/node/v24.16.0/bin/node scripts/capture-screenshots.mjs && /Users/schomer/.nvm/versions/node/v24.16.0/bin/node scripts/generate-report.mjs"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.82",
-    "@google-cloud/bigquery": "^8.3.1",
-    "ai": "^6.0.205",
     "firebase": "^12.14.0",
-    "google-auth-library": "^10.7.0",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
