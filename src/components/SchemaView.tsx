@@ -22,7 +22,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'PROJECT') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {result.columns.map((ds, i) => (
           <ClickableRow
             key={ds.name}
@@ -45,7 +45,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'DATASET') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {result.columns.map((t, i) => {
           const badge = TYPE_BADGE_MAP[t.type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: t.type ?? 'Unknown' };
           return (
@@ -1502,23 +1502,19 @@ function ClickableRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        padding: '6px 10px',
-        background: hovered ? 'var(--accent-dim)' : 'var(--surface)',
-        borderRadius: 7,
-        border: `1px solid ${hovered ? 'var(--accent)' : 'var(--border-subtle)'}`,
+        gap: 7,
+        padding: '4px 8px',
+        background: hovered ? 'var(--accent-dim)' : 'transparent',
+        borderRadius: 6,
+        border: 'none',
         cursor: 'pointer',
-        transition: 'all 0.15s ease',
+        transition: 'background 0.12s ease',
         userSelect: 'none',
-        boxShadow: hovered
-          ? '0 1px 8px rgba(26, 115, 232, 0.10)'
-          : '0 1px 2px rgba(0,0,0,0.03)',
-        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
         animationName: 'listRowSlideIn',
-        animationDuration: '0.25s',
+        animationDuration: '0.2s',
         animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
         animationFillMode: 'both',
-        animationDelay: `${index * 30}ms`,
+        animationDelay: `${index * 25}ms`,
       }}
     >
       {children}
@@ -1667,24 +1663,12 @@ function ArrowIcon() {
 
 function IconBadge({ icon, color }: { icon: string; color: string }) {
   return (
-    <div style={{
-      width: 24,
-      height: 24,
-      borderRadius: 6,
-      background: `${color}14`,
-      border: `1px solid ${color}30`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
-    }}>
-      <span
-        className="material-symbols-outlined"
-        style={{ fontSize: 13, color }}
-      >
-        {icon}
-      </span>
-    </div>
+    <span
+      className="material-symbols-outlined"
+      style={{ fontSize: 15, color, flexShrink: 0 }}
+    >
+      {icon}
+    </span>
   );
 }
 
