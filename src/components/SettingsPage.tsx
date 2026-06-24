@@ -19,6 +19,13 @@ export function SettingsPage() {
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mapsKey, setMapsKey] = useState('');
+  const [mapsKeySaved, setMapsKeySaved] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('google_maps_api_key');
+    if (stored) setMapsKey(stored);
+  }, []);
 
   useEffect(() => {
     if (accessToken) {
@@ -230,6 +237,63 @@ export function SettingsPage() {
           <div style={{ color: '#c23330', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="material-symbols-outlined">warning</span>
             No active Google Access Token found in session. Please sign in.
+          </div>
+        )}
+      </div>
+
+      {/* ── Section: Google Maps API Key ── */}
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 500, marginTop: 0, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>map</span>
+          Google Maps API Key
+        </h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: 0, marginBottom: '12px', lineHeight: 1.5 }}>
+          Required for map-based visualizations (geo point maps, US state maps, world maps). Create a key in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Google Cloud Console</a> with the Maps JavaScript API enabled.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input
+            type="password"
+            value={mapsKey}
+            onChange={(e) => { setMapsKey(e.target.value); setMapsKeySaved(false); }}
+            placeholder="AIza..."
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              color: 'var(--text)',
+              fontSize: '13px',
+              fontFamily: 'monospace',
+            }}
+          />
+          <button
+            onClick={() => {
+              if (mapsKey.trim()) {
+                localStorage.setItem('google_maps_api_key', mapsKey.trim());
+              } else {
+                localStorage.removeItem('google_maps_api_key');
+              }
+              setMapsKeySaved(true);
+            }}
+            style={{
+              padding: '8px 16px',
+              background: 'var(--accent, #4f7fff)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+            }}
+          >
+            Save
+          </button>
+        </div>
+        {mapsKeySaved && (
+          <div style={{ marginTop: '8px', fontSize: '12px', color: '#2e7d32', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>check_circle</span>
+            API key saved to browser storage.
           </div>
         )}
       </div>

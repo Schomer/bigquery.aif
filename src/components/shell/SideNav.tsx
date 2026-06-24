@@ -158,7 +158,7 @@ export function SideNav({ collapsed }: SideNavProps) {
         </div>
 
         {/* Recents */}
-        {conversations.length > 0 && (
+        {!collapsed && conversations.length > 0 && (
           <div className="gc-nav-group">
             <button className="gc-nav-group-header" onClick={() => setRecentsOpen((o) => !o)}>
               <span className="gc-nav-group-label">Recents</span>
