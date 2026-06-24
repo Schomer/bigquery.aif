@@ -109,6 +109,8 @@ export interface SchemaColumn {
   rowCount?: number | null;
   sizeBytes?: number | null;
   creationTime?: string | null;
+  // Project-level dataset metadata (populated when scope === 'PROJECT')
+  tableCount?: number | null;
 }
 
 export interface SchemaResult {

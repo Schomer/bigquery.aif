@@ -97,15 +97,38 @@ export async function fetchSchema(
 // ─── Project-level: list all datasets ─────────────────────────────────────────
 
 async function fetchProjectSchema(project: string): Promise<SchemaResult> {
-  const data = await bqGet(`${BQ_BASE}/${encodeURIComponent(project)}/datasets`);
+  // Paginate through all datasets
+  let allDatasets: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = `${BQ_BASE}/${encodeURIComponent(project)}/datasets?maxResults=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+    const data = await bqGet(url);
+    allDatasets = allDatasets.concat(data.datasets || []);
+    pageToken = data.nextPageToken;
+  } while (pageToken);
 
-  const datasets = data.datasets || [];
-  const columns: SchemaColumn[] = datasets.map((ds: any) => ({
+  // Fetch table counts for each dataset in parallel
+  const datasetIds = allDatasets.map((ds: any) => ds.datasetReference?.datasetId ?? '');
+  const tableCounts = await Promise.all(
+    datasetIds.map(async (dsId: string) => {
+      if (!dsId) return 0;
+      try {
+        const url = `${BQ_BASE}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dsId)}/tables?maxResults=1000`;
+        const data = await bqGet(url);
+        return data.totalItems ? parseInt(data.totalItems, 10) : (data.tables?.length ?? 0);
+      } catch {
+        return 0;
+      }
+    })
+  );
+
+  const columns: SchemaColumn[] = allDatasets.map((ds: any, i: number) => ({
     name: ds.datasetReference?.datasetId ?? '',
     type: 'DATASET',
     mode: 'NULLABLE' as const,
     description: null,
     fields: [],
+    tableCount: tableCounts[i],
   }));
 
   return {
@@ -118,12 +141,17 @@ async function fetchProjectSchema(project: string): Promise<SchemaResult> {
 // ─── Dataset-level: list all tables ───────────────────────────────────────────
 
 async function fetchDatasetSchema(project: string, dataset: string): Promise<SchemaResult> {
-  const data = await bqGet(
-    `${BQ_BASE}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/tables`
-  );
+  // Paginate through all tables
+  let allTables: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = `${BQ_BASE}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/tables?maxResults=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+    const data = await bqGet(url);
+    allTables = allTables.concat(data.tables || []);
+    pageToken = data.nextPageToken;
+  } while (pageToken);
 
-  const tables = data.tables || [];
-  const columns: SchemaColumn[] = tables.map((t: any) => ({
+  const columns: SchemaColumn[] = allTables.map((t: any) => ({
     name: t.tableReference?.tableId ?? '',
     type: t.type ?? 'TABLE',
     mode: 'NULLABLE' as const,

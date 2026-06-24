@@ -799,7 +799,9 @@ async function handleSchema(
 
   // Enriched listing: when the user asks for more than a basic list,
   // try a fast-path first (direct SQL), then fall back to Gemini for unusual requests.
-  if (!table && ENRICHMENT_PATTERNS.some((p) => p.test(message))) {
+  // Skip enrichment for project-scope (dataset listing) -- fetchProjectSchema already
+  // includes table counts and all metadata the user needs, so SQL is unnecessary.
+  if (!table && resolvedDataset && ENRICHMENT_PATTERNS.some((p) => p.test(message))) {
     // Fast-path: generate SQL directly for common enrichment patterns
     const fastResult = tryFastEnrichment(message, project, resolvedDataset);
     if (fastResult) {
@@ -828,30 +830,24 @@ async function handleSchema(
     }
 
     // Slow path: ask Gemini to generate the SQL for complex enrichment requests
-    onStatus?.(`Building enriched query for ${resolvedDataset ? `dataset ${resolvedDataset}` : `project ${project}`}...`);
+    onStatus?.(`Building enriched query for dataset ${resolvedDataset}...`);
 
-    const scope = resolvedDataset ? 'DATASET' : 'PROJECT';
-    const dsRef = resolvedDataset
-      ? `\`${project}.${resolvedDataset}\``
-      : '\`region-us\`';
+    const dsRef = `\`${project}.${resolvedDataset}\``;
 
     const enrichPrompt = `Generate a BigQuery INFORMATION_SCHEMA SQL query that fulfills the user's request.
 
-The user is requesting a ${scope}-level listing${resolvedDataset ? ` within dataset \`${resolvedDataset}\`` : ''} with additional requirements.
+The user is requesting a DATASET-level listing within dataset \`${resolvedDataset}\` with additional requirements.
 
 Project: ${project}
-${resolvedDataset ? `Dataset: ${resolvedDataset}` : `Available datasets: ${available.join(', ')}`}
+Dataset: ${resolvedDataset}
 
 INFORMATION_SCHEMA reference:
-- Project-level dataset list: SELECT schema_name FROM \`region-us\`.INFORMATION_SCHEMA.SCHEMATA
-- Cross-dataset table info: SELECT table_schema, table_name, table_type, creation_time FROM \`region-us\`.INFORMATION_SCHEMA.TABLES
-- Cross-dataset storage: SELECT table_schema, table_name, total_rows, total_logical_bytes, total_physical_bytes FROM \`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE
 - Dataset-level tables: SELECT * FROM ${dsRef}.INFORMATION_SCHEMA.TABLES
 - Dataset-level storage: SELECT table_name, total_rows, total_logical_bytes FROM ${dsRef}.INFORMATION_SCHEMA.TABLE_STORAGE
 - Dataset-level columns: SELECT table_name, column_name, data_type, is_nullable FROM ${dsRef}.INFORMATION_SCHEMA.COLUMNS
 
 Rules:
-- The FIRST column MUST be the primary entity identifier: alias as 'dataset_name' (project scope) or 'table_name' (dataset scope).
+- The FIRST column MUST be the primary entity identifier: alias as 'table_name'.
 - Use descriptive aliases for all other columns (e.g., 'table_count', 'total_size_bytes', 'row_count', 'last_modified').
 - Always wrap identifiers containing hyphens in backticks.
 - Return valid GoogleSQL only.`;
@@ -863,7 +859,7 @@ Rules:
       project,
     });
 
-    onStatus?.(`Running enriched INFORMATION_SCHEMA query against ${resolvedDataset || project}...`);
+    onStatus?.(`Running enriched INFORMATION_SCHEMA query against ${resolvedDataset}...`);
     const executed = await executeQuery(plan.sql, project);
 
     const queryResult: QueryResult = {
@@ -893,8 +889,7 @@ Rules:
   );
 
   // For table-level lookups, if the table isn't found in the assumed dataset,
-  // search across all datasets. Handles "tell me more about X" when the table
-  // lives in a different dataset than the current context.
+  // search other datasets in parallel.
   if (table) {
     try {
       const result = await fetchSchema(resolvedDataset, table, project);
@@ -903,17 +898,16 @@ Rules:
       if (err.message?.includes('Not found')) {
         onStatus?.(`Table ${table} not found in ${resolvedDataset}, searching other datasets...`);
         const allDatasets = await getAvailableDatasets(project);
-        for (const ds of allDatasets) {
-          if (ds === resolvedDataset) continue;
-          try {
-            const result = await fetchSchema(ds, table, project);
-            return [compose('schema', result)];
-          } catch {
-            // not in this dataset either -- keep looking
-          }
-        }
+        const otherDatasets = allDatasets.filter((ds) => ds !== resolvedDataset);
+        const results = await Promise.all(
+          otherDatasets.map((ds) =>
+            fetchSchema(ds, table, project).catch(() => null)
+          )
+        );
+        const found = results.find((r) => r !== null);
+        if (found) return [compose('schema', found)];
       }
-      throw err; // re-throw if not a "Not found" error or table truly doesn't exist
+      throw err;
     }
   }
 
