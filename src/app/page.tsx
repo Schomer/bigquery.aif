@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { AnimatedCrystalBall } from '@/components/AnimatedCrystalBall';
 import { SparkSpinner } from '@/components/SparkSpinner';
 import { CrystalBallOracle } from '@/components/CrystalBallOracle';
+import { EmptyCanvasAnimation } from '@/components/EmptyCanvasAnimation';
 import { useAuth } from '@/lib/auth-context';
 import { useConversation } from '@/lib/conversation-context';
 import { usePage } from '@/lib/page-context';
@@ -1314,12 +1315,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="results-panel-empty">
-                <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-dim)', marginBottom: 12 }}>
-                  query_stats
-                </span>
-                <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
-                  Results will appear here
-                </p>
+                <EmptyCanvasAnimation />
               </div>
             )}
           </div>
