@@ -597,6 +597,77 @@ const EnrichedSchemaQuerySchema = {
   required: ['sql', 'resultSummary']
 };
 
+// ─── Fast-path enrichment: generate SQL directly for common patterns ──────────
+// Avoids a Gemini round-trip for well-known enrichment requests.
+
+interface FastEnrichResult {
+  sql: string;
+  resultSummary: string;
+}
+
+function tryFastEnrichment(
+  message: string,
+  project: string,
+  resolvedDataset: string | undefined,
+): FastEnrichResult | null {
+  const lower = message.toLowerCase();
+  const isProjectScope = !resolvedDataset;
+
+  // ── PROJECT scope: datasets with table counts, sizes, etc. ──
+  if (isProjectScope) {
+    // "list datasets with the number of tables" / "datasets and their table count"
+    if (/\b(table|tables)\b/i.test(lower) && /\b(count|number|how\s+many|each)\b/i.test(lower)) {
+      return {
+        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count FROM \`${project}\`.\`region-us\`.INFORMATION_SCHEMA.TABLES GROUP BY table_schema ORDER BY table_count DESC`,
+        resultSummary: `Datasets in ${project} with number of tables in each`,
+      };
+    }
+    // "datasets with size" / "datasets sorted by size" / "largest datasets"
+    if (/\b(size|bytes|storage|largest|biggest|smallest)\b/i.test(lower)) {
+      return {
+        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count, SUM(total_logical_bytes) AS total_size_bytes, SUM(total_rows) AS total_rows FROM \`${project}\`.\`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE GROUP BY table_schema ORDER BY total_size_bytes DESC`,
+        resultSummary: `Datasets in ${project} with size and row counts`,
+      };
+    }
+    // "datasets with row count" / "datasets and how many rows"
+    if (/\b(row|rows|row.?count)\b/i.test(lower)) {
+      return {
+        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count, SUM(total_rows) AS total_rows FROM \`${project}\`.\`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE GROUP BY table_schema ORDER BY total_rows DESC`,
+        resultSummary: `Datasets in ${project} with table and row counts`,
+      };
+    }
+  }
+
+  // ── DATASET scope: tables with row counts, sizes, etc. ──
+  if (!isProjectScope) {
+    const dsRef = `\`${project}.${resolvedDataset}\``;
+    // "tables with row count" / "how many rows in each table"
+    if (/\b(row|rows|row.?count)\b/i.test(lower) && !/\b(size|bytes|storage)\b/i.test(lower)) {
+      return {
+        sql: `SELECT table_name, total_rows AS row_count FROM ${dsRef}.INFORMATION_SCHEMA.TABLE_STORAGE ORDER BY total_rows DESC`,
+        resultSummary: `Tables in ${resolvedDataset} with row counts`,
+      };
+    }
+    // "tables with size" / "largest tables"
+    if (/\b(size|bytes|storage|largest|biggest|smallest)\b/i.test(lower)) {
+      return {
+        sql: `SELECT table_name, total_rows AS row_count, total_logical_bytes AS size_bytes FROM ${dsRef}.INFORMATION_SCHEMA.TABLE_STORAGE ORDER BY total_logical_bytes DESC`,
+        resultSummary: `Tables in ${resolvedDataset} with sizes and row counts`,
+      };
+    }
+    // "tables with column count" / "how many columns"
+    if (/\b(column|columns|column.?count|field|fields)\b/i.test(lower)) {
+      return {
+        sql: `SELECT table_name, COUNT(*) AS column_count FROM ${dsRef}.INFORMATION_SCHEMA.COLUMNS GROUP BY table_name ORDER BY column_count DESC`,
+        resultSummary: `Tables in ${resolvedDataset} with column counts`,
+      };
+    }
+  }
+
+  return null; // no fast-path match -- fall back to Gemini
+}
+
+
 // Try to extract a dataset or table identifier from the message.
 // Handles patterns like "tables in ecomm", "describe orders", "schema of users",
 // and backtick-quoted refs like `project.dataset.table`.
@@ -707,8 +778,33 @@ async function handleSchema(
   }
 
   // Enriched listing: when the user asks for more than a basic list,
-  // generate a custom INFORMATION_SCHEMA query that honors their instructions.
+  // try a fast-path first (direct SQL), then fall back to Gemini for unusual requests.
   if (!table && ENRICHMENT_PATTERNS.some((p) => p.test(message))) {
+    // Fast-path: generate SQL directly for common enrichment patterns
+    const fastResult = tryFastEnrichment(message, project, resolvedDataset);
+    if (fastResult) {
+      onStatus?.(`Running INFORMATION_SCHEMA query against ${resolvedDataset || project}...`);
+      const executed = await executeQuery(fastResult.sql, project);
+
+      const queryResult: QueryResult = {
+        skill: 'query',
+        sql: fastResult.sql,
+        requiresConfirmation: false,
+        costConfirm: null,
+        columns: executed.columns,
+        rows: executed.rows,
+        rowCount: executed.rowCount,
+        totalBytesProcessed: 0,
+        costTier: 1,
+        suggestedVisualization: 'TABLE',
+        notableFindings: null,
+        resultSummary: fastResult.resultSummary,
+      };
+
+      return [compose('query', queryResult)];
+    }
+
+    // Slow path: ask Gemini to generate the SQL for complex enrichment requests
     onStatus?.(`Building enriched query for ${resolvedDataset ? `dataset ${resolvedDataset}` : `project ${project}`}...`);
 
     const scope = resolvedDataset ? 'DATASET' : 'PROJECT';
