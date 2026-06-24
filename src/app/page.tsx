@@ -977,7 +977,7 @@ export default function Home() {
                             borderRadius: '16px 16px 4px 16px',
                             padding: '10px 16px',
                             fontSize: 14,
-                            color: '#1557b0',
+                            color: '#0d3b7a',
                             lineHeight: 1.5,
                             cursor: loading ? 'default' : 'text',
                             userSelect: 'text',
