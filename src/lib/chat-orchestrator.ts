@@ -1274,7 +1274,12 @@ async function handleDataQuality(
           `AVG(CAST(${col.name} AS FLOAT64)) AS \`${col.name}__avg\``,
         );
       }
-      base.push(`APPROX_COUNT_DISTINCT(${col.name}) AS \`${col.name}__distinct\``);
+      const noDistinctTypes = ['GEOGRAPHY', 'STRUCT', 'RECORD', 'ARRAY', 'JSON'];
+      if (noDistinctTypes.includes(col.type.toUpperCase())) {
+        base.push(`NULL AS \`${col.name}__distinct\``);
+      } else {
+        base.push(`APPROX_COUNT_DISTINCT(${col.name}) AS \`${col.name}__distinct\``);
+      }
     }
     return base;
   });

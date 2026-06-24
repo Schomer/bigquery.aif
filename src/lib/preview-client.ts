@@ -17,9 +17,14 @@ export async function fetchTablePreview(
     const isNumeric = ['INTEGER', 'INT64', 'FLOAT', 'FLOAT64', 'NUMERIC', 'BIGNUMERIC'].includes(col.type.toUpperCase());
     const isString = ['STRING', 'BYTES'].includes(col.type.toUpperCase());
 
+    const noDistinctTypes = ['GEOGRAPHY', 'STRUCT', 'RECORD', 'ARRAY', 'JSON'];
+    const supportsDistinct = !noDistinctTypes.includes(col.type.toUpperCase());
+
     const parts: string[] = [
       `COUNTIF(${q} IS NULL) AS \`__null_${col.name}\``,
-      `COUNT(DISTINCT ${q}) AS \`__distinct_${col.name}\``,
+      supportsDistinct
+        ? `COUNT(DISTINCT ${q}) AS \`__distinct_${col.name}\``
+        : `NULL AS \`__distinct_${col.name}\``,
     ];
 
     if (isNumeric) {
