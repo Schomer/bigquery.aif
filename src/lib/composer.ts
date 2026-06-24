@@ -209,6 +209,8 @@ function composeQuery(result: QueryResult): CompositionEnvelope {
         tier: result.costTier,
         requiresConfirmation: false,
       },
+      jobId: result.jobId,
+      project: extractProjectFromSql(result.sql),
     },
     nextActions,
     insight,
@@ -511,6 +513,13 @@ function extractTableFromSql(sql: string): string | null {
   const ref = match[1];
   // Return only the final segment (table name, not project/dataset prefix)
   return ref.split('.').pop() ?? null;
+}
+
+// Extract the project ID from a fully qualified backtick-quoted table reference in SQL.
+// Handles `project.dataset.table` patterns.
+function extractProjectFromSql(sql: string): string | undefined {
+  const match = sql.match(/`([A-Za-z0-9_-]+)\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+`/);
+  return match?.[1] ?? undefined;
 }
 
 function buildQueryHeadline(rowCount: number, sql: string): string {

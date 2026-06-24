@@ -30,7 +30,7 @@ const TONE_CLASSES: Record<string, string> = {
 };
 
 export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInlineClick }: Props) {
-  const [provenanceOpen, setProvenanceOpen] = useState(false);
+
   const toneClass = TONE_CLASSES[envelope.headline.tone] ?? 'tone-neutral';
 
   // Convert chip click -> send the chip's label as a message (primary path)
@@ -135,18 +135,34 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
           gap: 6,
         }}>
           {envelope.provenance.cost && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16, alignItems: 'center' }}>
               <span>{formatBytes(envelope.provenance.cost.totalBytesProcessed)} processed</span>
               <span>Tier {envelope.provenance.cost.tier}</span>
               {envelope.provenance.freshness && <span>{envelope.provenance.freshness}</span>}
+              {envelope.provenance.jobId && envelope.provenance.project && (
+                <a
+                  href={`https://console.cloud.google.com/bigquery?project=${encodeURIComponent(envelope.provenance.project)}&j=bq:US:${encodeURIComponent(envelope.provenance.jobId)}&page=queryresults`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: '#4f7fff',
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    marginLeft: 'auto',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 13 }}>open_in_new</span>
+                  BigQuery
+                </a>
+              )}
             </div>
           )}
           {envelope.provenance.sql && (
-            <details
-              style={{ margin: 0 }}
-              open={provenanceOpen}
-              onToggle={(e) => setProvenanceOpen((e.target as HTMLDetailsElement).open)}
-            >
+            <details style={{ margin: 0 }}>
               <summary style={{
                 fontSize: 11,
                 color: 'var(--text-dim)',
@@ -157,7 +173,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
                 gap: 4,
                 userSelect: 'none',
               }}>
-                <span style={{ transform: provenanceOpen ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s', fontSize: 8 }}>&#9654;</span>
+                <span className="provenance-arrow">&#9654;</span>
                 SQL
               </summary>
               <div style={{ paddingTop: 6 }}>

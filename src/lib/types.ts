@@ -88,6 +88,8 @@ export interface CompositionEnvelope {
     cost?: CostEstimate;
     freshness?: string;
     sourceResultRef?: string;
+    jobId?: string;
+    project?: string;
   };
   nextActions: HandoffEnvelope[];
   requiresConfirmation?: boolean;
@@ -156,6 +158,7 @@ export interface QueryResult {
   columns: string[];
   rows: unknown[][];
   rowCount: number;
+  jobId?: string;
   totalBytesProcessed: number;
   costTier: CostTier;
   suggestedVisualization: VisualizationType;

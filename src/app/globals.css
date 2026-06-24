@@ -61,6 +61,17 @@
   white-space: pre;
 }
 
+/* Provenance arrow for SQL toggle */
+.provenance-arrow {
+  display: inline-block;
+  font-size: 8px;
+  transition: transform 0.15s;
+  transform: rotate(0deg);
+}
+details[open] > summary .provenance-arrow {
+  transform: rotate(90deg);
+}
+
 /* Chip / next-action buttons */
 .chip {
   display: inline-flex;
