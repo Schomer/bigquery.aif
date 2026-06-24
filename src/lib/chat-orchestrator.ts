@@ -378,24 +378,37 @@ export class ChatOrchestrator {
     let resolvedDataset = context?.resolvedDataset;
     let availableDatasets = context?.availableDatasets;
 
-    // ── Classify intent via LLM (unified skill routing + multistep detection) ──
+    // ── Classify intent ────────────────────────────────────────────────────────
+    // Try keyword-based classification first to avoid an unnecessary Gemini
+    // round-trip for obvious requests (e.g., "list my datasets").
     let skill = context?.forcedSkill;
     if (!skill) {
-      try {
-        const available = availableDatasets ?? await getAvailableDatasets(project);
-        const dataset = resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
-        availableDatasets = available;
-        resolvedDataset = dataset;
-        const messages = history.slice(-6).map((m) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        }));
+      const keywordResult = classifyIntent(resolvedMessage, context);
+      if (keywordResult.confidence === 'high') {
+        skill = keywordResult.skill;
+        // Still need available datasets for downstream handlers
+        if (!availableDatasets) {
+          const available = await getAvailableDatasets(project);
+          availableDatasets = available;
+          resolvedDataset = resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+        }
+      } else {
+        // Low/medium confidence: fall back to LLM intent classifier
+        try {
+          const available = availableDatasets ?? await getAvailableDatasets(project);
+          const dataset = resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+          availableDatasets = available;
+          resolvedDataset = dataset;
+          const messages = history.slice(-6).map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          }));
 
-        onStatus?.(`Classifying intent for: "${resolvedMessage.slice(0, 80)}${resolvedMessage.length > 80 ? '...' : ''}"`);
+          onStatus?.(`Classifying intent for: "${resolvedMessage.slice(0, 80)}${resolvedMessage.length > 80 ? '...' : ''}"`);
 
-        const routingRef = await loadSkillDoc('intent-routing');
+          const routingRef = await loadSkillDoc('intent-routing');
 
-        const classifierPrompt = `You are the intent classifier for a BigQuery AI assistant.
+          const classifierPrompt = `You are the intent classifier for a BigQuery AI assistant.
 You have two jobs:
 1. Classify which SKILL should handle the user's request.
 2. Detect if the request requires MULTIPLE DISTINCT ACTIONS (multistep).
@@ -414,48 +427,48 @@ Current active project: ${project}
 Current active dataset: ${dataset}
 Available datasets: ${available.join(', ')}`;
 
-        const result = await callGemini({
-          systemInstruction: classifierPrompt,
-          messages: [...messages, { role: 'user' as const, content: resolvedMessage }],
-          schema: IntentClassifierSchema,
-          project,
-        });
+          const result = await callGemini({
+            systemInstruction: classifierPrompt,
+            messages: [...messages, { role: 'user' as const, content: resolvedMessage }],
+            schema: IntentClassifierSchema,
+            project,
+          });
 
-        if (result && result.isMultistep && result.steps && result.steps.length > 1) {
-          const envelope: CompositionEnvelope = {
-            id: 'workflow_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            skill: 'multistep',
-            headline: {
-              text: `Created a workflow with ${result.steps.length} steps to complete your request.`,
-              tone: 'NEUTRAL',
-              basis: 'STATUS',
-            },
-            primaryArtifact: {
-              type: 'MULTISTEP_VIEW',
-              data: {
-                steps: result.steps,
+          if (result && result.isMultistep && result.steps && result.steps.length > 1) {
+            const envelope: CompositionEnvelope = {
+              id: 'workflow_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+              skill: 'multistep',
+              headline: {
+                text: `Created a workflow with ${result.steps.length} steps to complete your request.`,
+                tone: 'NEUTRAL',
+                basis: 'STATUS',
               },
-            },
-            provenance: {
-              visibility: 'COLLAPSED',
-            },
-            nextActions: [],
-          };
-          return { envelopes: [envelope], skill: 'multistep' };
+              primaryArtifact: {
+                type: 'MULTISTEP_VIEW',
+                data: {
+                  steps: result.steps,
+                },
+              },
+              provenance: {
+                visibility: 'COLLAPSED',
+              },
+              nextActions: [],
+            };
+            return { envelopes: [envelope], skill: 'multistep' };
+          }
+
+          // Single-step: use the LLM-classified skill
+          if (result && result.skill) {
+            skill = result.skill as SkillName;
+          }
+        } catch (e) {
+          console.warn('[Intent classifier failed, falling back to keyword router]', e);
         }
 
-        // Single-step: use the LLM-classified skill
-        if (result && result.skill) {
-          skill = result.skill as SkillName;
+        // Final fallback: use the keyword result even if low confidence
+        if (!skill) {
+          skill = keywordResult.skill;
         }
-      } catch (e) {
-        console.warn('[Intent classifier failed, falling back to keyword router]', e);
-      }
-
-      // Fallback: keyword-based classification if LLM didn't return a skill
-      if (!skill) {
-        const routerOutput = classifyIntent(resolvedMessage, context);
-        skill = routerOutput.skill;
       }
     }
 
@@ -502,17 +515,24 @@ Available datasets: ${available.join(', ')}`;
         envelopes = await handleQuery(resolvedMessage, history, enrichedContext, onStatus);
     }
 
-    // ── Self-review: run for all skills ──────────────────────────────────────
+    // ── Self-review: run for skills that benefit from it ─────────────────────
+    // Skip review for fast-path metadata results (simple INFORMATION_SCHEMA
+    // queries with canned SQL) since the output is straightforward tabular data.
     if (envelopes.length > 0) {
-      onStatus?.('Reviewing output quality...');
-      const reviewed = await Promise.all(
-        envelopes.map((env) =>
-          env.requiresConfirmation
-            ? Promise.resolve(env) // skip review for confirmation cards
-            : selfReviewEnvelope(env, resolvedMessage, project, onStatus)
-        )
+      const needsReview = envelopes.some((env) =>
+        !env.requiresConfirmation && !env.skipSelfReview
       );
-      envelopes = reviewed;
+      if (needsReview) {
+        onStatus?.('Reviewing output quality...');
+        const reviewed = await Promise.all(
+          envelopes.map((env) =>
+            (env.requiresConfirmation || env.skipSelfReview)
+              ? Promise.resolve(env)
+              : selfReviewEnvelope(env, resolvedMessage, project, onStatus)
+          )
+        );
+        envelopes = reviewed;
+      }
     }
 
     return { envelopes, skill };
@@ -802,7 +822,9 @@ async function handleSchema(
         resultSummary: fastResult.resultSummary,
       };
 
-      return [compose('query', queryResult)];
+      const envelope = compose('query', queryResult);
+      envelope.skipSelfReview = true;
+      return [envelope];
     }
 
     // Slow path: ask Gemini to generate the SQL for complex enrichment requests

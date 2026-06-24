@@ -93,6 +93,7 @@ export interface CompositionEnvelope {
   };
   nextActions: HandoffEnvelope[];
   requiresConfirmation?: boolean;
+  skipSelfReview?: boolean;
   insight?: string | null;
 }
 
