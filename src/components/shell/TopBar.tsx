@@ -27,10 +27,10 @@ export function TopBar({ onNavToggle }: TopBarProps) {
   const { user, accessToken, projects, activeProject, isLoading, signIn, signOut, setActiveProject } = useAuth();
   const { layout, setLayout } = useLayout();
 
-  const LAYOUT_OPTIONS: { value: ChatLayout; icon: string; label: string }[] = [
+  const LAYOUT_OPTIONS: { value: ChatLayout; icon: string; label: string; flip?: boolean }[] = [
     { value: 'unified', icon: 'view_stream', label: 'Unified' },
     { value: 'chat-left', icon: 'side_navigation', label: 'Chat left' },
-    { value: 'chat-right', icon: 'right_panel_open', label: 'Chat right' },
+    { value: 'chat-right', icon: 'side_navigation', label: 'Chat right', flip: true },
   ];
 
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
@@ -340,7 +340,7 @@ export function TopBar({ onNavToggle }: TopBarProps) {
               aria-checked={layout === opt.value}
               aria-label={opt.label}
               data-tooltip={opt.label}
-              className={`layout-seg-btn${layout === opt.value ? ' layout-seg-btn--active' : ''}`}
+              className={`layout-seg-btn${layout === opt.value ? ' layout-seg-btn--active' : ''}${opt.flip ? ' layout-seg-btn--flip' : ''}`}
               onClick={() => setLayout(opt.value)}
             >
               <span className="material-symbols-outlined">{opt.icon}</span>
