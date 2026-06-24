@@ -43,6 +43,7 @@ This project uses server-side rendering (no static export). To validate that edi
 
 After a successful build, always commit and push to deploy via Firebase App Hosting:
 1. `git add -A && git commit -m "<descriptive message>" && git push`
+2. `node scripts/deploy.mjs`
 
 The user tests on the deployed app, not locally. Skipping this step means they cannot see changes.
 

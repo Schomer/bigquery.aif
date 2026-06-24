@@ -22,7 +22,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'PROJECT') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {result.columns.map((ds, i) => (
           <ClickableRow
             key={ds.name}
@@ -32,7 +32,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
           >
             <IconBadge icon="database" color="#6366f1" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-mono)', display: 'block' }}>{ds.name}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-mono)', display: 'block' }}>{ds.name}</span>
             </div>
             <TypePill label="Dataset" />
             <ArrowIcon />
@@ -45,7 +45,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'DATASET') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {result.columns.map((t, i) => {
           const badge = TYPE_BADGE_MAP[t.type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: t.type ?? 'Unknown' };
           return (
@@ -57,7 +57,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
             >
               <IconBadge icon={badge.icon} color={badge.color} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-mono)', display: 'block' }}>{t.name}</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-mono)', display: 'block' }}>{t.name}</span>
                 {t.description && (
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 2, display: 'block' }}>{t.description}</span>
                 )}
@@ -1502,23 +1502,23 @@ function ClickableRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '10px 14px',
+        gap: 8,
+        padding: '6px 10px',
         background: hovered ? 'var(--accent-dim)' : 'var(--surface)',
-        borderRadius: 10,
+        borderRadius: 7,
         border: `1px solid ${hovered ? 'var(--accent)' : 'var(--border-subtle)'}`,
         cursor: 'pointer',
-        transition: 'all 0.18s ease',
+        transition: 'all 0.15s ease',
         userSelect: 'none',
         boxShadow: hovered
-          ? '0 2px 12px rgba(26, 115, 232, 0.12)'
-          : '0 1px 3px rgba(0,0,0,0.04)',
+          ? '0 1px 8px rgba(26, 115, 232, 0.10)'
+          : '0 1px 2px rgba(0,0,0,0.03)',
         transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
         animationName: 'listRowSlideIn',
-        animationDuration: '0.3s',
+        animationDuration: '0.25s',
         animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
         animationFillMode: 'both',
-        animationDelay: `${index * 40}ms`,
+        animationDelay: `${index * 30}ms`,
       }}
     >
       {children}
@@ -1654,10 +1654,10 @@ function ArrowIcon() {
     <span
       className="material-symbols-outlined schema-list-arrow"
       style={{
-        fontSize: 16,
+        fontSize: 14,
         color: 'var(--text-dim)',
         flexShrink: 0,
-        transition: 'transform 0.18s ease, color 0.18s ease',
+        transition: 'transform 0.15s ease, color 0.15s ease',
       }}
     >
       chevron_right
@@ -1668,9 +1668,9 @@ function ArrowIcon() {
 function IconBadge({ icon, color }: { icon: string; color: string }) {
   return (
     <div style={{
-      width: 32,
-      height: 32,
-      borderRadius: 8,
+      width: 24,
+      height: 24,
+      borderRadius: 6,
       background: `${color}14`,
       border: `1px solid ${color}30`,
       display: 'flex',
@@ -1680,7 +1680,7 @@ function IconBadge({ icon, color }: { icon: string; color: string }) {
     }}>
       <span
         className="material-symbols-outlined"
-        style={{ fontSize: 16, color }}
+        style={{ fontSize: 13, color }}
       >
         {icon}
       </span>
@@ -1692,13 +1692,13 @@ function TypePill({ label, color }: { label: string; color?: string }) {
   const c = color ?? 'var(--text-muted)';
   return (
     <span style={{
-      fontSize: 10,
+      fontSize: 9,
       fontWeight: 500,
       color: c,
       background: `${c}12`,
       border: `1px solid ${c}25`,
-      padding: '2px 8px',
-      borderRadius: 12,
+      padding: '1px 6px',
+      borderRadius: 10,
       letterSpacing: '0.02em',
       whiteSpace: 'nowrap',
       flexShrink: 0,
