@@ -519,8 +519,7 @@ export default function Home() {
   }
 
   function handleInlineClick(message: string) {
-    setInput(message);
-    inputRef.current?.focus();
+    sendMessage(message);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {

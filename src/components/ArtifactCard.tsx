@@ -125,17 +125,25 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
         )}
       </div>
 
-      {/* Provenance (collapsible) */}
-      {envelope.provenance.sql && (
+      {/* Provenance: cost shown inline, SQL behind collapsible toggle */}
+      {(envelope.provenance.sql || envelope.provenance.cost) && (
         <div style={{
           borderTop: '1px solid var(--border-subtle)',
-          padding: '0 20px',
+          padding: '8px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
         }}>
-          {envelope.provenance.visibility === 'VISIBLE' ? (
-            <ProvenanceContent envelope={envelope} />
-          ) : (
+          {envelope.provenance.cost && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16 }}>
+              <span>{formatBytes(envelope.provenance.cost.totalBytesProcessed)} processed</span>
+              <span>Tier {envelope.provenance.cost.tier}</span>
+              {envelope.provenance.freshness && <span>{envelope.provenance.freshness}</span>}
+            </div>
+          )}
+          {envelope.provenance.sql && (
             <details
-              style={{ paddingTop: 8, paddingBottom: 8 }}
+              style={{ margin: 0 }}
               open={provenanceOpen}
               onToggle={(e) => setProvenanceOpen((e.target as HTMLDetailsElement).open)}
             >
@@ -144,15 +152,16 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
                 color: 'var(--text-dim)',
                 cursor: 'pointer',
                 listStyle: 'none',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 4,
+                userSelect: 'none',
               }}>
-                <span style={{ transform: provenanceOpen ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
-                SQL + cost details
+                <span style={{ transform: provenanceOpen ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s', fontSize: 8 }}>&#9654;</span>
+                SQL
               </summary>
-              <div style={{ paddingTop: 8, paddingBottom: 8 }}>
-                <ProvenanceContent envelope={envelope} />
+              <div style={{ paddingTop: 6 }}>
+                <div className="sql-block">{envelope.provenance.sql}</div>
               </div>
             </details>
           )}
@@ -337,21 +346,6 @@ function ChartWithToggle({
   );
 }
 
-function ProvenanceContent({ envelope }: { envelope: CompositionEnvelope }) {
-  const { sql, cost, freshness } = envelope.provenance;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {cost && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16 }}>
-          <span>{formatBytes(cost.totalBytesProcessed)} processed</span>
-          <span>Tier {cost.tier}</span>
-          {freshness && <span>{freshness}</span>}
-        </div>
-      )}
-      {sql && <div className="sql-block">{sql}</div>}
-    </div>
-  );
-}
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1_099_511_627_776) return `${(bytes / 1_099_511_627_776).toFixed(1)} TB`;

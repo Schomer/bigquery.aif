@@ -130,3 +130,14 @@ export function computeQuartiles(values: number[]): {
     max: sorted[n - 1],
   };
 }
+
+/**
+ * Build a natural-language drill-down message from a column + value.
+ * Replaces the old technical "Filter the last query where ..." text.
+ */
+export function drillDownMessage(column: string, rawValue: unknown): string {
+  const display = rawValue === null || rawValue === undefined
+    ? String(rawValue)
+    : String(rawValue);
+  return `Show only rows where ${column} is ${display}`;
+}
