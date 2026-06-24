@@ -2,6 +2,7 @@
 
 import type { QueryResult } from '@/lib/types';
 import { useState } from 'react';
+import { drillDownMessage } from './charts/chart-utils';
 
 interface Props {
   result: QueryResult;
@@ -116,8 +117,7 @@ export function DataTable({ result, onSendMessage }: Props) {
                         if (isEntityCol) {
                           onSendMessage(`Tell me more about ${cell}`);
                         } else {
-                          const formattedValue = typeof cell === 'number' ? cell : `'${cell}'`;
-                          onSendMessage(`Filter the last query where \`${columns[ci]}\` = ${formattedValue}`);
+                          onSendMessage(drillDownMessage(columns[ci], cell));
                         }
                       }
                     }}

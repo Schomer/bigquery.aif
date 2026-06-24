@@ -48,6 +48,14 @@ export function SchemaView({ result, onSendMessage }: Props) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {result.columns.map((t, i) => {
           const badge = TYPE_BADGE_MAP[t.type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: t.type ?? 'Unknown' };
+          const meta: string[] = [];
+          if (t.rowCount != null) meta.push(`${t.rowCount.toLocaleString()} rows`);
+          if (t.sizeBytes != null) meta.push(formatBytes(t.sizeBytes));
+          if (t.creationTime) {
+            try {
+              meta.push(`created ${new Date(t.creationTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`);
+            } catch { /* skip bad date */ }
+          }
           return (
             <ClickableRow
               key={t.name}
@@ -58,8 +66,10 @@ export function SchemaView({ result, onSendMessage }: Props) {
               <IconBadge icon={badge.icon} color={badge.color} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-mono)', display: 'block' }}>{t.name}</span>
-                {t.description && (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 2, display: 'block' }}>{t.description}</span>
+                {(t.description || meta.length > 0) && (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 2, display: 'block' }}>
+                    {t.description ? `${t.description} — ` : ''}{meta.join(' / ')}
+                  </span>
                 )}
               </div>
               <TypePill label={badge.label} color={badge.color} />

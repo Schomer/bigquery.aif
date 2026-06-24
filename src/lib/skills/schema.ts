@@ -127,8 +127,13 @@ async function fetchDatasetSchema(project: string, dataset: string): Promise<Sch
     name: t.tableReference?.tableId ?? '',
     type: t.type ?? 'TABLE',
     mode: 'NULLABLE' as const,
-    description: null,
+    description: t.friendlyName || null,
     fields: [],
+    rowCount: t.numRows ? parseInt(t.numRows, 10) : null,
+    sizeBytes: t.numBytes ? parseInt(t.numBytes, 10) : null,
+    creationTime: t.creationTime
+      ? new Date(parseInt(t.creationTime, 10)).toISOString()
+      : null,
   }));
 
   return {

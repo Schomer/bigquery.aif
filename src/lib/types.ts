@@ -102,6 +102,10 @@ export interface SchemaColumn {
   mode: 'REQUIRED' | 'NULLABLE' | 'REPEATED';
   description?: string | null;
   fields?: SchemaColumn[];
+  // Dataset-level table metadata (populated when scope === 'DATASET')
+  rowCount?: number | null;
+  sizeBytes?: number | null;
+  creationTime?: string | null;
 }
 
 export interface SchemaResult {

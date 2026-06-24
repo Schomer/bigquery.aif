@@ -9,6 +9,7 @@ import {
   resolveAxes,
   gaussianKDE,
   computeQuartiles,
+  drillDownMessage,
 } from './chart-utils';
 
 // ---------------------------------------------------------------------------
@@ -199,8 +200,7 @@ export function GaugeRenderer({ result, onSendMessage }: ChartProps) {
 
   const handleClick = useCallback(() => {
     if (label) {
-      const fv = typeof currentValue === 'number' ? currentValue : `'${currentValue}'`;
-      onSendMessage(`Filter the last query where \`${xKey}\` = ${fv}`);
+      onSendMessage(drillDownMessage(xKey, currentValue));
     }
   }, [label, currentValue, xKey, onSendMessage]);
 
@@ -345,10 +345,7 @@ export function HeatmapRenderer({ result, onSendMessage }: ChartProps) {
                   }}
                   onMouseLeave={() => setTip(null)}
                   onClick={() => {
-                    const fv = typeof rl === 'number' ? rl : `'${rl}'`;
-                    onSendMessage(
-                      `Filter the last query where \`${result.columns[0]}\` = ${fv}`,
-                    );
+                    onSendMessage(drillDownMessage(result.columns[0], rl));
                   }}
                 />
               );
@@ -474,8 +471,7 @@ export function BoxplotRenderer({ result, onSendMessage }: ChartProps) {
                 }}
                 onMouseLeave={() => setTip(null)}
                 onClick={() => {
-                  const fv = isNaN(Number(g.cat)) ? `'${g.cat}'` : g.cat;
-                  onSendMessage(`Filter the last query where \`${xKey}\` = ${fv}`);
+                  onSendMessage(drillDownMessage(xKey, g.cat));
                 }}
               >
                 {/* Whisker line min to max */}
@@ -640,10 +636,7 @@ export function CandlestickRenderer({ result, onSendMessage }: ChartProps) {
                 }}
                 onMouseLeave={() => setTip(null)}
                 onClick={() => {
-                  const fv = `'${c.label}'`;
-                  onSendMessage(
-                    `Filter the last query where \`${ohlc.dateCol}\` = ${fv}`,
-                  );
+                  onSendMessage(drillDownMessage(ohlc.dateCol, c.label));
                 }}
               >
                 {/* Wick */}
@@ -801,8 +794,7 @@ export function ViolinRenderer({ result, onSendMessage }: ChartProps) {
                 }}
                 onMouseLeave={() => setTip(null)}
                 onClick={() => {
-                  const fv = isNaN(Number(g.cat)) ? `'${g.cat}'` : g.cat;
-                  onSendMessage(`Filter the last query where \`${xKey}\` = ${fv}`);
+                  onSendMessage(drillDownMessage(xKey, g.cat));
                 }}
               >
                 <path d={pathD} fill={COLORS[i % COLORS.length]} fillOpacity={0.35} stroke={COLORS[i % COLORS.length]} strokeWidth={1.5} />
@@ -1021,8 +1013,7 @@ export function RidgelineRenderer({ result, onSendMessage }: ChartProps) {
                 }}
                 onMouseLeave={() => setTip(null)}
                 onClick={() => {
-                  const fv = isNaN(Number(ridge.cat)) ? `'${ridge.cat}'` : ridge.cat;
-                  onSendMessage(`Filter the last query where \`${xKey}\` = ${fv}`);
+                  onSendMessage(drillDownMessage(xKey, ridge.cat));
                 }}
               >
                 <path
@@ -1244,9 +1235,7 @@ export function NetworkGraphRenderer({ result, onSendMessage }: ChartProps) {
                 }}
                 onMouseLeave={() => setTip(null)}
                 onClick={() => {
-                  onSendMessage(
-                    `Filter the last query where \`${result.columns[0]}\` = '${node.id}'`,
-                  );
+                  onSendMessage(drillDownMessage(result.columns[0], node.id));
                 }}
               >
                 <circle
@@ -1400,10 +1389,7 @@ export function TileMapRenderer({ result, onSendMessage }: ChartProps) {
                 }}
                 onMouseLeave={() => setTip(null)}
                 onClick={() => {
-                  const fv = isNaN(Number(tile.label)) ? `'${tile.label}'` : tile.label;
-                  onSendMessage(
-                    `Filter the last query where \`${labelCol}\` = ${fv}`,
-                  );
+                  onSendMessage(drillDownMessage(labelCol, tile.label));
                 }}
               >
                 <rect
