@@ -329,8 +329,9 @@ export function TopBar({ onNavToggle }: TopBarProps) {
         </div>
       </div>
 
-      {/* ── Center: layout switcher ── */}
-      <div className="gc-top-bar-center">
+      {/* ── Right: utility icons + auth ── */}
+      <div className="gc-top-bar-end">
+        {/* Layout switcher */}
         <div className="layout-seg" role="radiogroup" aria-label="Chat layout">
           {LAYOUT_OPTIONS.map((opt) => (
             <button
@@ -346,10 +347,6 @@ export function TopBar({ onNavToggle }: TopBarProps) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* ── Right: utility icons + auth ── */}
-      <div className="gc-top-bar-end">
         {/* Gemini */}
         <button className="gc-icon-btn" aria-label="Gemini">
           <svg viewBox="0 0 256 256" width="22" height="22" fill="currentColor" aria-hidden="true">
