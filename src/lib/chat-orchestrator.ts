@@ -587,6 +587,7 @@ const TABLE_DESCRIBE_SIGNALS = [
   'list columns', 'column types', 'structure', 'what is in', "what's in",
   'tell me more', 'tell me about', 'show me more about', 'more about',
   'inspect', 'details about', 'explore', 'look at',
+  'find the', 'find dataset',
 ];
 
 // Enrichment detection: signals that the user wants more than a basic listing
@@ -698,9 +699,33 @@ function extractSchemaIdentifiers(
 ): { scope: 'PROJECT' | 'DATASET' | 'TABLE'; dataset?: string; table?: string } | null {
   const lower = message.toLowerCase();
 
+  // Common pronouns that should never be treated as identifiers
+  const PRONOUNS = new Set(['it', 'them', 'that', 'this', 'those', 'these', 'its', 'they']);
+
   // PROJECT scope: listing datasets
   if (DATASET_LIST_SIGNALS.some((s) => lower.includes(s))) {
     return { scope: 'PROJECT' };
+  }
+
+  // Named dataset lookup: "find the iowa_liquor_sales dataset", "find dataset ecomm"
+  // Check this early so "find the X dataset and show me what's in it" resolves X
+  // as a dataset before the TABLE_DESCRIBE_SIGNALS path captures the pronoun "it".
+  const findDatasetMatch = message.match(
+    /\bfind\s+(?:the\s+)?(?:dataset\s+)?[`]?(\w[\w-]*)[`]?(?:\s+dataset)?\b/i
+  );
+  if (findDatasetMatch) {
+    const name = findDatasetMatch[1];
+    if (!PRONOUNS.has(name.toLowerCase()) && name.toLowerCase() !== 'the') {
+      // Check if it matches a known dataset
+      if (availableDatasets && availableDatasets.some((ds) => ds.toLowerCase() === name.toLowerCase())) {
+        return { scope: 'DATASET', dataset: name };
+      }
+      // Even if not in the cached list, treat it as a dataset lookup
+      // (the user explicitly said "dataset")
+      if (/\bdataset\b/i.test(message)) {
+        return { scope: 'DATASET', dataset: name };
+      }
+    }
   }
 
   // DATASET scope: listing tables -- try to extract dataset name
@@ -726,17 +751,21 @@ function extractSchemaIdentifiers(
     // Dotted dataset.table ref (no backticks): "show me more about iowa_liquor_sales.sales_deduped"
     // Must be checked BEFORE the single-name regex, which would stop at the dot.
     const dottedMatch = message.match(
-      /(?:describe|schema\s+(?:of|for)|(?:tell|more|details)\s+(?:me\s+)?(?:more\s+)?about|inspect|explore|look\s+at|what'?s?\s+in)\s+(?:the\s+)?[`]?(\w[\w-]*)\.(\w[\w-]*)[`]?/i
+      /(?:describe|schema\s+(?:of|for)|(?:tell|more|details)\s+(?:me\s+)?(?:more\s+)?about|inspect|explore|look\s+at|what'?s?\s+in|find\s+(?:the\s+)?)\s*(?:the\s+)?[`]?(\w[\w-]*)\.(\w[\w-]*)[`]?/i
     );
     if (dottedMatch) {
       return { scope: 'TABLE', dataset: dottedMatch[1], table: dottedMatch[2] };
     }
     // "describe orders", "schema of users", "tell me about orders"
     const tblMatch = message.match(
-      /(?:describe|schema\s+(?:of|for)|(?:tell|more|details)\s+(?:me\s+)?(?:more\s+)?about|inspect|explore|look\s+at|what'?s?\s+in)\s+(?:the\s+)?[`]?(\w[\w-]*)[`]?/i
+      /(?:describe|schema\s+(?:of|for)|(?:tell|more|details)\s+(?:me\s+)?(?:more\s+)?about|inspect|explore|look\s+at|what'?s?\s+in|find\s+(?:the\s+)?)\s*(?:the\s+)?[`]?(\w[\w-]*)[`]?/i
     );
     if (tblMatch) {
       const name = tblMatch[1];
+      // Skip pronouns -- these are referential ("what's in it") not identifiers
+      if (PRONOUNS.has(name.toLowerCase())) {
+        return null; // fall back to Gemini for pronoun resolution
+      }
       if (availableDatasets && availableDatasets.some((ds) => ds.toLowerCase() === name.toLowerCase())) {
         return { scope: 'DATASET', dataset: name };
       }

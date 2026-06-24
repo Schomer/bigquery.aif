@@ -51,6 +51,8 @@ const SCHEMA_SIGNALS = [
   // Natural click-through phrases ("tell me more about X", "explore X")
   'tell me more', 'show me more about', 'more about', 'tell me about',
   'inspect', 'details about', 'explore', 'look at',
+  // Lookup-by-name phrases ("find the X dataset", "find dataset X")
+  'find the', 'find dataset',
 ];
 
 const DISCOVERY_SIGNALS = [
