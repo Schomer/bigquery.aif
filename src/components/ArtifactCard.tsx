@@ -126,7 +126,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
       </div>
 
       {/* Provenance: cost shown inline, SQL behind collapsible toggle */}
-      {(envelope.provenance.sql || envelope.provenance.cost) && (
+      {(envelope.provenance.sql || envelope.provenance.cost || envelope.provenance.jobId) && (
         <div style={{
           borderTop: '1px solid var(--border-subtle)',
           padding: '8px 20px',
