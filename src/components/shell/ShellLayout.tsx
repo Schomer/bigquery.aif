@@ -16,7 +16,19 @@ interface ShellLayoutProps {
 
 export function ShellLayout({ children }: ShellLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const { user, bqAuthorized } = useAuth();
+  const { user, bqAuthorized, isLoading } = useAuth();
+
+  // While Firebase Auth is resolving, render nothing to avoid flashing the
+  // sign-in page before the existing session is detected.
+  if (isLoading) {
+    return (
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--bg, #F0F5FE)',
+      }} />
+    );
+  }
 
   if (!user || !bqAuthorized) {
     return <SignedOutPage />;
