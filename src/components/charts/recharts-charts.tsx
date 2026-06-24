@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState, useEffect, useCallback } from 'react';
 import type { QueryResult } from '@/lib/types';
 import {
   LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -115,24 +116,56 @@ const BAR_CHART_MIN_HEIGHT = 200;
 
 export function BarChartRenderer({ result, onSendMessage }: ChartProps) {
   const { data, xKey, yKeys } = useChartSetup(result);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const chartHeight = Math.max(BAR_CHART_MIN_HEIGHT, data.length * BAR_ROW_HEIGHT);
   const needsScroll = chartHeight > BAR_CHART_MAX_VISIBLE;
+
+  // Measure width once on mount and on window resize (not via ResizeObserver
+  // on the scroll container, which causes an infinite loop with Recharts).
+  const measure = useCallback(() => {
+    if (containerRef.current) {
+      setContainerWidth(containerRef.current.clientWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [measure]);
+
+  const chart = (
+    <BarChart
+      data={data}
+      layout="vertical"
+      width={containerWidth || undefined}
+      height={chartHeight}
+      margin={CHART_MARGIN}
+      onClick={makeClickHandler(xKey, onSendMessage)}
+    >
+      <CartesianGrid {...GRID_STYLE} />
+      <XAxis type="number" {...AXIS_STYLE} />
+      <YAxis type="category" dataKey={xKey} {...AXIS_STYLE} width={100} />
+      <Tooltip {...TOOLTIP_STYLE} />
+      {yKeys.map((k, i) => (
+        <Bar key={k} dataKey={k} fill={COLORS[i % COLORS.length]} />
+      ))}
+      {yKeys.length > 1 && <Legend iconSize={8} />}
+    </BarChart>
+  );
+
   return (
-    <div>
-      <div style={needsScroll ? { maxHeight: BAR_CHART_MAX_VISIBLE, overflowY: 'auto' } : undefined}>
+    <div ref={containerRef}>
+      {needsScroll ? (
+        <div style={{ maxHeight: BAR_CHART_MAX_VISIBLE, overflowY: 'auto' }}>
+          {containerWidth > 0 && chart}
+        </div>
+      ) : (
         <ResponsiveContainer width="100%" height={chartHeight}>
-          <BarChart data={data} layout="vertical" margin={CHART_MARGIN} onClick={makeClickHandler(xKey, onSendMessage)}>
-            <CartesianGrid {...GRID_STYLE} />
-            <XAxis type="number" {...AXIS_STYLE} />
-            <YAxis type="category" dataKey={xKey} {...AXIS_STYLE} width={100} />
-            <Tooltip {...TOOLTIP_STYLE} />
-            {yKeys.map((k, i) => (
-              <Bar key={k} dataKey={k} fill={COLORS[i % COLORS.length]} />
-            ))}
-            {yKeys.length > 1 && <Legend iconSize={8} />}
-          </BarChart>
+          {chart}
         </ResponsiveContainer>
-      </div>
+      )}
       <ChartTip />
     </div>
   );
