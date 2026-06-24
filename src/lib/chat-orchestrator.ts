@@ -1025,12 +1025,12 @@ Always wrap fully qualified table references in literal backticks: \`${project}.
 Today's date is: ${new Date().toISOString().split('T')[0]}
 Also generate a resultSummary field: a brief, contextual one-line summary of what the query results likely show (e.g., 'Revenue by month for the last 12 months' or 'Top 10 customers by order count'). This will be used as the headline shown to the user.
 
-VISUALIZATION SELECTION: Pick the suggestedVisualization that best matches both the data shape AND the user's explicit request. If the user asks for a specific chart type, always honor that request. Otherwise use these guidelines:
+VISUALIZATION SELECTION: Pick the suggestedVisualization that best matches both the data shape AND the user's explicit request. If the user asks for a specific chart type, you MUST use that exact type -- do not substitute a similar one. In particular, "column chart" means COLUMN_CHART (vertical bars) and "bar chart" means BAR_CHART (horizontal bars); these are different chart types and must not be confused. Otherwise use these guidelines:
 - TABLE: default for raw data, lists, or when no chart fits.
 - KPI_CARD: single aggregate value (count, sum, average).
 - LINE_CHART: trends over time, time series.
-- BAR_CHART: horizontal comparison of categories.
-- COLUMN_CHART: vertical comparison of 5-15 discrete categories.
+- BAR_CHART: horizontal bars comparing categories. NOT the same as COLUMN_CHART.
+- COLUMN_CHART: vertical bars comparing 5-15 discrete categories. NOT the same as BAR_CHART.
 - AREA_CHART: volume/magnitude changes over time, stacked areas.
 - SCATTER: correlation between two numeric variables.
 - PIE_CHART: part-to-whole composition (3-7 slices).
