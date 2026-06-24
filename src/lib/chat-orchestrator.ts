@@ -219,6 +219,28 @@ const QueryResponseSchema = {
   required: ['sql', 'suggestedVisualization']
 };
 
+const SelfReviewResponseSchema = {
+  type: 'OBJECT',
+  properties: {
+    improvedHeadline: { type: 'STRING' },
+    additionalInsight: { type: 'STRING' },
+    betterVisualization: { type: 'STRING', enum: [
+      'TABLE', 'KPI_CARD',
+      'LINE_CHART', 'BAR_CHART', 'AREA_CHART', 'SCATTER', 'PIE_CHART',
+      'DONUT_CHART', 'COLUMN_CHART', 'HISTOGRAM', 'SPARKLINE',
+      'RADAR', 'FUNNEL', 'TREEMAP', 'SANKEY', 'COMPOSED_CHART',
+      'GAUGE', 'HEATMAP', 'BOXPLOT', 'CANDLESTICK',
+      'VIOLIN', 'DENSITY_PLOT', 'RIDGELINE', 'NETWORK_GRAPH', 'TILE_MAP',
+      'GEO_POINT_MAP', 'USA_MAP', 'WORLD_MAP',
+    ] },
+    improvedXAxis: { type: 'STRING' },
+    improvedYAxis: { type: 'ARRAY', items: { type: 'STRING' } },
+    highlightColumns: { type: 'ARRAY', items: { type: 'STRING' } },
+    deemphasizeColumns: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: [],
+};
+
 const DataManagementResponseSchema = {
   type: 'OBJECT',
   properties: {
@@ -765,6 +787,128 @@ Rules:
   const envelope = compose('schema', result);
   return [envelope];
 }
+// ─── Self-review refinement ───────────────────────────────────────────────────
+// A single Gemini pass that reviews the composed query output from the user's
+// perspective and optionally improves headline, insight, visualization, or
+// column emphasis before the envelope reaches the UI.
+
+async function selfReviewEnvelope(
+  envelope: CompositionEnvelope,
+  userMessage: string,
+  project: string,
+  onStatus?: (status: string) => void,
+): Promise<CompositionEnvelope> {
+  // Only review query-type envelopes with actual data
+  const data = envelope.primaryArtifact.data as QueryResult | null;
+  if (!data || !('rows' in data) || data.rows.length === 0) return envelope;
+
+  // Build a compact snapshot for the reviewer (no full row dump)
+  const sampleRows = data.rows.slice(0, 5).map((row) =>
+    Object.fromEntries(data.columns.map((col, i) => [col, row[i]]))
+  );
+
+  const snapshot = {
+    headline: envelope.headline.text,
+    visualization: data.suggestedVisualization,
+    columns: data.columns,
+    rowCount: data.rowCount,
+    sampleRows,
+    xAxis: data.xAxis ?? null,
+    yAxis: data.yAxis ?? null,
+    notableFindings: data.notableFindings ?? null,
+    insight: envelope.insight ?? null,
+    nextActions: envelope.nextActions.map((a) => a.label),
+  };
+
+  const reviewPrompt = `You are a senior data analyst, expert graphic designer, and UI designer reviewing output from a BigQuery data assistant. A user asked a question and the assistant produced a result. Your job is to review the output and decide if anything should be improved BEFORE it reaches the user.
+
+Evaluate these four dimensions:
+
+1. COMPREHENSION: Is the headline clear and informative? Does it tell the user what they are looking at in plain language? If not, write a better one. A good headline leads with the key finding or answers the user's question directly -- not just "N rows from table".
+
+2. COMPLETENESS: Would a user naturally want additional context? For example: percentage changes, comparisons to baselines, time range annotations, totals, or callouts about outliers. If so, write a short additionalInsight (1-2 sentences) that adds this context.
+
+3. PRESENTATION: Is the visualization type the best fit for this data shape and the user's intent? Consider: number of rows, number of columns, whether there is a time axis, whether values are categorical vs numeric, part-to-whole relationships, distributions, etc. Only suggest a change if a different type would genuinely communicate the data more effectively.
+
+4. VISUAL DESIGN & LAYOUT: From an expert graphic designer and UI designer viewpoint -- which columns or series should be visually emphasized to draw the user's eye to what matters? Which columns are supporting detail that should be de-emphasized? Consider data hierarchy, information density, and visual weight.
+
+Rules:
+- Only return fields where you have an actual improvement. Leave fields empty/null if the current output is already good.
+- Do not repeat what is already there -- only override if you can make it measurably better.
+- Keep headlines under 120 characters.
+- Keep insights under 200 characters.
+- For highlightColumns and deemphasizeColumns, use exact column names from the data.`;
+
+  try {
+    onStatus?.('Reviewing output...');
+    const review = await callGemini({
+      systemInstruction: reviewPrompt,
+      prompt: `User's question: "${userMessage}"
+
+Current output snapshot:
+${JSON.stringify(snapshot, null, 2)}`,
+      schema: SelfReviewResponseSchema,
+      project,
+    });
+
+    if (!review) return envelope;
+
+    // Apply non-empty overrides
+    const updated = { ...envelope };
+    updated.headline = { ...envelope.headline };
+    updated.primaryArtifact = { ...envelope.primaryArtifact };
+
+    if (review.improvedHeadline) {
+      updated.headline.text = review.improvedHeadline;
+    }
+
+    if (review.additionalInsight) {
+      updated.insight = review.additionalInsight;
+    }
+
+    if (review.betterVisualization && review.betterVisualization !== data.suggestedVisualization) {
+      const updatedData = { ...data, suggestedVisualization: review.betterVisualization };
+      if (review.improvedXAxis) updatedData.xAxis = review.improvedXAxis;
+      if (review.improvedYAxis && review.improvedYAxis.length > 0) updatedData.yAxis = review.improvedYAxis;
+      // Re-compose with the updated visualization
+      const recomposed = compose('query', updatedData);
+      // Preserve the improved headline and insight
+      if (review.improvedHeadline) recomposed.headline.text = review.improvedHeadline;
+      if (review.additionalInsight) recomposed.insight = review.additionalInsight;
+      // Apply emphasis from visual design review
+      if (review.highlightColumns?.length || review.deemphasizeColumns?.length) {
+        recomposed.primaryArtifact.emphasis = {
+          highlight: review.highlightColumns ?? [],
+          deemphasize: review.deemphasizeColumns ?? [],
+        };
+      }
+      return recomposed;
+    }
+
+    // Apply axis overrides without changing visualization type
+    if (review.improvedXAxis || (review.improvedYAxis && review.improvedYAxis.length > 0)) {
+      const updatedData = { ...data };
+      if (review.improvedXAxis) updatedData.xAxis = review.improvedXAxis;
+      if (review.improvedYAxis && review.improvedYAxis.length > 0) updatedData.yAxis = review.improvedYAxis;
+      updated.primaryArtifact = { ...updated.primaryArtifact, data: updatedData };
+    }
+
+    // Apply visual emphasis
+    if (review.highlightColumns?.length || review.deemphasizeColumns?.length) {
+      updated.primaryArtifact.emphasis = {
+        highlight: review.highlightColumns ?? [],
+        deemphasize: review.deemphasizeColumns ?? [],
+      };
+    }
+
+    return updated;
+  } catch (err) {
+    // Self-review is non-fatal -- if it fails, return the original envelope
+    console.warn('[self-review failed, returning original]', err);
+    return envelope;
+  }
+}
+
 // ─── Query handler ────────────────────────────────────────────────────────────
 
 async function handleQuery(
@@ -932,7 +1076,9 @@ Return the corrected SQL and a short explanation of what you changed.`,
     resultSummary: queryPlan.resultSummary ?? null,
   };
 
-  return [compose('query', result)];
+  const envelope = compose('query', result);
+  const reviewed = await selfReviewEnvelope(envelope, message, project, onStatus);
+  return [reviewed];
 }
 
 // ─── Data Management handler ───────────────────────────────────────────────────
