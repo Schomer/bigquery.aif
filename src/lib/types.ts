@@ -182,7 +182,9 @@ export type DmOperation =
   | 'ALTER_TABLE'
   | 'CREATE_VIEW'
   | 'RENAME'
-  | 'COPY_TABLE';
+  | 'COPY_TABLE'
+  | 'MERGE'
+  | 'PARTITION_TABLE';
 
 export interface DmExampleGroup {
   keyValue: Record<string, unknown>;
@@ -224,7 +226,7 @@ export type DataManagementResult =
 
 // ─── Data Quality types (bigquery-skill-data-quality) ─────────────────────────
 
-export type DqCheckType = 'PROFILE' | 'NULLS' | 'DUPLICATES' | 'FRESHNESS';
+export type DqCheckType = 'PROFILE' | 'NULLS' | 'DUPLICATES' | 'FRESHNESS' | 'COMPLETENESS' | 'RANGE_VALIDATION' | 'REFERENTIAL_INTEGRITY' | 'SCHEMA_DRIFT';
 export type DqSeverity = 'INFO' | 'WARNING' | 'ISSUE';
 
 export interface DqFinding {

@@ -245,7 +245,7 @@ const SelfReviewResponseSchema = {
 const DataManagementResponseSchema = {
   type: 'OBJECT',
   properties: {
-    operation: { type: 'STRING', enum: ['DEDUPE', 'DELETE', 'UPDATE', 'FILL_NULLS', 'CREATE_TABLE', 'ALTER_TABLE', 'CREATE_VIEW', 'RENAME', 'COPY_TABLE'] },
+    operation: { type: 'STRING', enum: ['DEDUPE', 'DELETE', 'UPDATE', 'FILL_NULLS', 'CREATE_TABLE', 'ALTER_TABLE', 'CREATE_VIEW', 'RENAME', 'COPY_TABLE', 'MERGE', 'PARTITION_TABLE'] },
     executionStrategy: { type: 'STRING', enum: ['DIRECT_EXECUTE', 'PREVIEW_AND_CONFIRM', 'PREVIEW_AND_CONFIRM_DEDUPE'] },
     dataset: { type: 'STRING' },
     table: { type: 'STRING' },
@@ -271,7 +271,7 @@ const DiscoveryResponseSchema = {
 const DqIntentSchema = {
   type: 'OBJECT',
   properties: {
-    checkType: { type: 'STRING', enum: ['PROFILE', 'NULLS', 'DUPLICATES', 'FRESHNESS'] },
+    checkType: { type: 'STRING', enum: ['PROFILE', 'NULLS', 'DUPLICATES', 'FRESHNESS', 'COMPLETENESS', 'RANGE_VALIDATION', 'REFERENTIAL_INTEGRITY', 'SCHEMA_DRIFT'] },
     table: { type: 'STRING' },
     dataset: { type: 'STRING' }
   },
@@ -281,7 +281,7 @@ const DqIntentSchema = {
 const DataLoadingIntentSchema = {
   type: 'OBJECT',
   properties: {
-    operationType: { type: 'STRING', enum: ['EXPORT_CSV', 'EXPORT_SHEETS', 'SCHEDULE'] },
+    operationType: { type: 'STRING', enum: ['EXPORT_CSV', 'EXPORT_SHEETS', 'SCHEDULE', 'SAVED_QUERY'] },
     tableName: { type: 'STRING' },
     sql: { type: 'STRING' }
   },
@@ -393,7 +393,10 @@ export class ChatOrchestrator {
           resolvedDataset = resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
         }
       } else {
-        // Low/medium confidence: fall back to LLM intent classifier
+        // Low/medium confidence or ambiguous: fall back to LLM intent classifier
+        if (keywordResult.ambiguousReadWrite) {
+          onStatus?.('Analyzing intent (ambiguous read/write signals detected)...');
+        }
         try {
           const available = availableDatasets ?? await getAvailableDatasets(project);
           const dataset = resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
@@ -1600,7 +1603,7 @@ async function handleDataQuality(
 
   onStatus?.(`Classifying quality check type for: "${message.slice(0, 60)}${message.length > 60 ? '...' : ''}"`);
   const intent = await callGemini({
-    systemInstruction: `You classify BigQuery data quality requests. Extract check type and table name. Available check types: PROFILE (general stats), NULLS (null analysis), DUPLICATES (find duplicate rows), FRESHNESS (when was the table last updated). The active project is ${project}, default dataset is ${dataset}, available datasets are: ${available.join(', ')}.`,
+    systemInstruction: `You classify BigQuery data quality requests. Extract check type and table name. Available check types: PROFILE (general stats), NULLS (null analysis), DUPLICATES (find duplicate rows), FRESHNESS (when was the table last updated), COMPLETENESS (overall completeness percentage across all columns), RANGE_VALIDATION (check numeric columns for out-of-range values), REFERENTIAL_INTEGRITY (check foreign key relationships for orphaned rows), SCHEMA_DRIFT (compare current schema against expected structure). The active project is ${project}, default dataset is ${dataset}, available datasets are: ${available.join(', ')}.`,
     prompt: message,
     schema: DqIntentSchema,
     project,
