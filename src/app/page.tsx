@@ -200,7 +200,7 @@ export default function Home() {
       const data = await ChatOrchestrator.processMessage({
         message: text,
         history: historyBefore,
-        context: { ...context, project: activeProject || context.project },
+        context: { ...context, project: activeProject || context.project, uid: user?.uid },
         onStatus: (s: string) => { setStatusText(s); pendingStepsRef.current.push(s); },
       });
       const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
@@ -259,7 +259,7 @@ export default function Home() {
       const data = await ChatOrchestrator.processMessage({
         message: userText,
         history: historyUpTo.slice(0, -1),
-        context: { ...context, project: activeProject || context.project },
+        context: { ...context, project: activeProject || context.project, uid: user?.uid },
         onStatus: (s: string) => { setStatusText(s); pendingStepsRef.current.push(s); },
       });
       const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
@@ -308,7 +308,7 @@ export default function Home() {
       const data = await ChatOrchestrator.processMessage({
         message: text,
         history: messages,
-        context: { ...context, project: activeProject || context.project },
+        context: { ...context, project: activeProject || context.project, uid: user?.uid },
         onStatus: (s: string) => { setStatusText(s); pendingStepsRef.current.push(s); },
       });
 
@@ -385,7 +385,7 @@ export default function Home() {
       const data = await ChatOrchestrator.processMessage({
         message: 'confirm',
         history: messages,
-        context: { ...context, project: activeProject || context.project, confirmedPayload: envelope.primaryArtifact.data as DataManagementResult },
+        context: { ...context, project: activeProject || context.project, uid: user?.uid, confirmedPayload: envelope.primaryArtifact.data as DataManagementResult },
         onStatus: (s: string) => setStatusText(s),
       });
       const envelopes: CompositionEnvelope[] = data.envelopes ?? [];
@@ -462,6 +462,7 @@ export default function Home() {
       const mergedContext = {
         ...context,
         project: activeProject || context.project,
+        uid: user?.uid,
         forcedSkill: chip.targetSkill as SkillName,
         ...(chipContext.dataset ? { dataset: String(chipContext.dataset) } : {}),
         ...(chipContext.table ? { lastTable: String(chipContext.table) } : {}),

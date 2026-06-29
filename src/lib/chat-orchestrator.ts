@@ -5,7 +5,8 @@
 import { classifyIntent, resolveReferences } from './router';
 import { fetchSchema } from './skills/schema';
 import { compose } from './composer';
-import { dryRun, executeQuery, executeDml } from './bigquery-client';
+import { dryRun, executeQuery, executeDml, exportToSheets, createScheduledQuery } from './bigquery-client';
+import { saveQuery as firestoreSaveQuery } from './firestore-service';
 import type {
   ChatMessage,
   CompositionEnvelope,
@@ -292,9 +293,11 @@ const MonitoringIntentSchema = {
 const DataLoadingIntentSchema = {
   type: 'OBJECT',
   properties: {
-    operationType: { type: 'STRING', enum: ['EXPORT_CSV', 'EXPORT_SHEETS', 'SCHEDULE', 'SAVED_QUERY'] },
+    operationType: { type: 'STRING', enum: ['EXPORT_CSV', 'EXPORT_SHEETS', 'SCHEDULE', 'SAVED_QUERY', 'SHARE'] },
     tableName: { type: 'STRING' },
-    sql: { type: 'STRING' }
+    sql: { type: 'STRING' },
+    displayName: { type: 'STRING' },
+    schedule: { type: 'STRING' },
   },
   required: ['operationType']
 };
@@ -358,6 +361,7 @@ export interface ProcessMessageArgs {
     lastTable?: string;
     dataset?: string;
     project?: string;
+    uid?: string;
     confirmedPayload?: DataManagementResult;
     forcedSkill?: SkillName;
     resolvedDataset?: string;
@@ -2148,7 +2152,7 @@ async function handleDataQuality(
 
 async function handleDataLoading(
   message: string,
-  context?: { project?: string; dataset?: string; lastTable?: string },
+  context?: { project?: string; dataset?: string; lastTable?: string; uid?: string },
   onStatus?: (status: string) => void
 ): Promise<CompositionEnvelope[]> {
   const project = context?.project || '';
@@ -2159,26 +2163,66 @@ async function handleDataLoading(
 
   onStatus?.(`Analyzing export request (project: ${project}, dataset: ${dataset || 'none'})...`);
   const intent = await callGemini({
-    systemInstruction: `Classify a BigQuery data loading request. EXPORT_CSV = download as CSV. EXPORT_SHEETS = send to Google Sheets. SCHEDULE = schedule a recurring query. SAVED_QUERY = save a query for later reuse. Extract the table name or SQL to use. Project: ${project}, dataset: ${dataset}`,
+    systemInstruction: `Classify a BigQuery data loading request. EXPORT_CSV = download as CSV. EXPORT_SHEETS = send to Google Sheets. SCHEDULE = schedule a recurring query. SAVED_QUERY = save a query for later reuse. SHARE = share or copy query results. Extract the table name or SQL to use. For SCHEDULE, also extract a schedule frequency into 'schedule' (e.g. 'every 24 hours', 'every monday 09:00') and a display name into 'displayName'. Project: ${project}, dataset: ${dataset}`,
     prompt: message,
     schema: DataLoadingIntentSchema,
     project,
   });
 
+  // SCHEDULE — create via Data Transfer API, fall back to guidance
   if (intent.operationType === 'SCHEDULE') {
     const sql = intent.sql ?? (intent.tableName ? `SELECT * FROM \`${project}.${dataset}.${intent.tableName}\`` : '');
-    const scheduleMsg = `To schedule this query, run:\n\nbq query --schedule="every 24 hours" --display_name="Scheduled Query" --destination_table=${project}:${dataset || 'dataset'}.scheduled_results --replace "${sql.replace(/"/g, '\\"')}"\n\nOr use the BigQuery Console: open bigquery.cloud.google.com, paste the SQL into the editor, and click More > Schedule.`;
-    const result: DataLoadingResult = {
-      skill: 'data-loading',
-      operationType: 'SCHEDULE_INFO',
-      message: scheduleMsg,
-      sql,
-    };
-    return [compose('data-loading', result)];
+    const displayName = intent.displayName || 'Scheduled Query';
+    const schedule = intent.schedule || 'every 24 hours';
+
+    try {
+      onStatus?.(`Creating scheduled query "${displayName}" (${schedule})...`);
+      const { transferConfigName } = await createScheduledQuery(project, displayName, sql, schedule);
+      const result: DataLoadingResult = {
+        skill: 'data-loading',
+        operationType: 'SCHEDULE_CREATED',
+        message: `Scheduled query created: "${displayName}" running ${schedule}.`,
+        sql,
+        scheduleName: transferConfigName,
+        scheduleFrequency: schedule,
+      };
+      return [compose('data-loading', result)];
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const fallbackMsg = `Could not create scheduled query automatically (${errMsg}).\n\nTo schedule manually, run:\nbq query --schedule="${schedule}" --display_name="${displayName}" --destination_table=${project}:${dataset || 'dataset'}.scheduled_results --replace "${sql.replace(/"/g, '\\"')}"\n\nOr use the BigQuery Console: open bigquery.cloud.google.com, paste the SQL into the editor, and click More > Schedule.`;
+      const result: DataLoadingResult = {
+        skill: 'data-loading',
+        operationType: 'SCHEDULE_INFO',
+        message: fallbackMsg,
+        sql,
+      };
+      return [compose('data-loading', result)];
+    }
   }
 
+  // SAVED_QUERY — save to Firestore Prompts Library
   if (intent.operationType === 'SAVED_QUERY') {
     const sqlToSave = intent.sql ?? (intent.tableName ? `SELECT * FROM \`${project}.${dataset}.${intent.tableName}\`` : '');
+    const label = intent.displayName || 'Saved Query';
+    const uid = context?.uid;
+
+    if (uid && sqlToSave) {
+      try {
+        onStatus?.(`Saving query "${label}"...`);
+        await firestoreSaveQuery(uid, label, sqlToSave);
+        const result: DataLoadingResult = {
+          skill: 'data-loading',
+          operationType: 'QUERY_SAVED',
+          message: `Query saved as "${label}". You can find it in the Prompts Library.`,
+          sql: sqlToSave,
+          savedQueryLabel: label,
+        };
+        return [compose('data-loading', result)];
+      } catch {
+        // Fall through to guidance
+      }
+    }
+
     const result: DataLoadingResult = {
       skill: 'data-loading',
       operationType: 'SCHEDULE_INFO',
@@ -2188,12 +2232,91 @@ async function handleDataLoading(
     return [compose('data-loading', result)];
   }
 
+  // EXPORT_SHEETS — create a Google Spreadsheet and write results
   if (intent.operationType === 'EXPORT_SHEETS') {
+    const sheetsSql = intent.sql ?? (intent.tableName
+      ? `SELECT * FROM \`${project}.${dataset}.${intent.tableName}\` LIMIT 50000`
+      : null);
+
+    if (sheetsSql) {
+      try {
+        onStatus?.(`Running query for Sheets export...`);
+        const executed = await executeQuery(sheetsSql, project);
+        onStatus?.(`Creating Google Spreadsheet with ${executed.rowCount} rows...`);
+        const title = `BQ Export - ${new Date().toLocaleDateString()} - ${intent.tableName || 'query'}`;
+        const { spreadsheetUrl } = await exportToSheets(title, executed.columns, executed.rows);
+        const result: DataLoadingResult = {
+          skill: 'data-loading',
+          operationType: 'EXPORT_SHEETS',
+          message: `Exported ${executed.rowCount} rows to Google Sheets.`,
+          sheetsUrl: spreadsheetUrl,
+          rowCount: executed.rowCount,
+          columnCount: executed.columns.length,
+          sql: sheetsSql,
+        };
+        return [compose('data-loading', result)];
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const result: DataLoadingResult = {
+          skill: 'data-loading',
+          operationType: 'SCHEDULE_INFO',
+          message: `Could not export to Sheets automatically (${errMsg}).\n\nTo export manually:\n1. Run the query in the BigQuery Console\n2. Click "Explore Data" > "Explore with Sheets" in the results toolbar\n3. This opens a connected Sheet that stays linked to the query\n\nNote: Direct Sheets export is limited to 10 million cells.`,
+          sql: sheetsSql,
+        };
+        return [compose('data-loading', result)];
+      }
+    }
+
     const result: DataLoadingResult = {
       skill: 'data-loading',
-      operationType: 'SCHEDULE_INFO',
-      message: 'To export to Google Sheets:\n\n1. Run the query in the BigQuery Console\n2. Click "Explore Data" > "Explore with Sheets" in the results toolbar\n3. This opens a connected Sheet that stays linked to the query\n\nFor automated exports, use the Sheets API:\nbq extract --destination_format=CSV ${project}:${dataset || "dataset"}.table_name gs://bucket/file.csv\nThen import the CSV into Sheets.\n\nNote: Direct Sheets export is limited to 10 million cells.',
-      sql: intent.sql ?? null,
+      operationType: 'NOT_SUPPORTED',
+      message: 'No table or SQL found to export. Please specify a table name or run a query first.',
+    };
+    return [compose('data-loading', result)];
+  }
+
+  // SHARE — copy results as formatted text
+  if (intent.operationType === 'SHARE') {
+    const shareSql = intent.sql ?? (intent.tableName
+      ? `SELECT * FROM \`${project}.${dataset}.${intent.tableName}\` LIMIT 100`
+      : null);
+
+    if (shareSql) {
+      try {
+        onStatus?.(`Running query for sharing...`);
+        const executed = await executeQuery(shareSql, project);
+        // Build a text table for clipboard
+        const colWidths = executed.columns.map((col, ci) => {
+          const vals = executed.rows.slice(0, 20).map(r => String(r[ci] ?? '').length);
+          return Math.max(col.length, ...vals, 4);
+        });
+        const pad = (s: string, w: number) => s + ' '.repeat(Math.max(0, w - s.length));
+        const header = executed.columns.map((c, i) => pad(c, colWidths[i])).join(' | ');
+        const separator = colWidths.map(w => '-'.repeat(w)).join('-+-');
+        const dataRows = executed.rows.slice(0, 50).map(row =>
+          row.map((cell, i) => pad(String(cell ?? ''), colWidths[i])).join(' | ')
+        );
+        const shareText = [header, separator, ...dataRows].join('\n');
+
+        const result: DataLoadingResult = {
+          skill: 'data-loading',
+          operationType: 'SHARE_CLIPBOARD',
+          message: `Query results ready to share (${executed.rowCount} rows, showing first ${Math.min(50, executed.rowCount)}).`,
+          shareText,
+          sql: shareSql,
+          rowCount: executed.rowCount,
+          columnCount: executed.columns.length,
+        };
+        return [compose('data-loading', result)];
+      } catch {
+        // Fall through
+      }
+    }
+
+    const result: DataLoadingResult = {
+      skill: 'data-loading',
+      operationType: 'NOT_SUPPORTED',
+      message: 'No table or SQL found to share. Please specify a table name or run a query first.',
     };
     return [compose('data-loading', result)];
   }

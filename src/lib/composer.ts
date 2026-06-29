@@ -620,6 +620,14 @@ function composeDataLoading(result: DataLoadingResult): CompositionEnvelope {
 
   if (result.operationType === 'EXPORT_CSV' && result.rowCount !== undefined) {
     headlineText = `${result.rowCount.toLocaleString()} rows${result.columnCount ? ` across ${result.columnCount} columns` : ''} ready to download`;
+  } else if (result.operationType === 'EXPORT_SHEETS' && result.sheetsUrl) {
+    headlineText = `Exported ${result.rowCount?.toLocaleString() ?? ''} rows to Google Sheets`;
+  } else if (result.operationType === 'SCHEDULE_CREATED') {
+    headlineText = `Scheduled query created: ${result.scheduleFrequency || 'recurring'}`;
+  } else if (result.operationType === 'QUERY_SAVED') {
+    headlineText = `Query saved: "${result.savedQueryLabel || 'Saved Query'}"`;
+  } else if (result.operationType === 'SHARE_CLIPBOARD') {
+    headlineText = `Results ready to share (${result.rowCount?.toLocaleString() ?? ''} rows)`;
   } else if (result.operationType === 'SCHEDULE_INFO') {
     headlineText = 'Scheduling information';
   }

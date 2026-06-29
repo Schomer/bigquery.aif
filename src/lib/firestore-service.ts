@@ -129,6 +129,19 @@ export async function deletePrompt(uid: string, id: string): Promise<void> {
   });
 }
 
+export async function saveQuery(uid: string, label: string, sql: string): Promise<string> {
+  const id = generateId();
+  const prompt: SavedPrompt = {
+    id,
+    createdAt: nowISO(),
+    label,
+    prompt: sql,
+    category: 'Reporting',
+  };
+  await savePrompt(uid, prompt);
+  return id;
+}
+
 // ── User Preferences ─────────────────────────────────────────────────────────
 
 export interface UserPreferences {

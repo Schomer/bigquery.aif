@@ -195,3 +195,102 @@ export { getAccessToken } from './gis-auth';
 export function checkResponse(res: Response, data: any) {
   checkAuthError(res.status, data);
 }
+
+// ─── Google Sheets export ─────────────────────────────────────────────────────
+
+export async function exportToSheets(
+  title: string,
+  columns: string[],
+  rows: unknown[][],
+): Promise<{ spreadsheetUrl: string }> {
+  const totalCells = columns.length * (rows.length + 1);
+  if (totalCells > 10_000_000) {
+    throw new Error(`Result exceeds the 10 million cell limit for Google Sheets (${totalCells.toLocaleString()} cells). Use CSV export instead.`);
+  }
+
+  const token = getAccessToken();
+  if (!token) throw new Error('Not authenticated. Please sign in again.');
+
+  // Create a new spreadsheet
+  const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      properties: { title },
+      sheets: [{ properties: { title: 'Query Results' } }],
+    }),
+  });
+  const createData = await createRes.json();
+  if (!createRes.ok) {
+    const msg = createData?.error?.message || `HTTP ${createRes.status}`;
+    throw new Error(`Failed to create spreadsheet: ${msg}`);
+  }
+
+  const spreadsheetId = createData.spreadsheetId;
+  const spreadsheetUrl = createData.spreadsheetUrl;
+
+  // Write data: header row + data rows
+  const values = [
+    columns,
+    ...rows.map((row) => row.map((cell) => {
+      if (cell === null || cell === undefined) return '';
+      if (typeof cell === 'object') return JSON.stringify(cell);
+      return cell;
+    })),
+  ];
+
+  const writeRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Query%20Results!A1?valueInputOption=RAW`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ range: 'Query Results!A1', values }),
+    },
+  );
+  if (!writeRes.ok) {
+    const writeData = await writeRes.json();
+    throw new Error(`Failed to write data to spreadsheet: ${writeData?.error?.message || `HTTP ${writeRes.status}`}`);
+  }
+
+  return { spreadsheetUrl };
+}
+
+// ─── Scheduled Query ──────────────────────────────────────────────────────────
+
+export async function createScheduledQuery(
+  project: string,
+  displayName: string,
+  sql: string,
+  schedule: string,
+): Promise<{ transferConfigName: string }> {
+  const token = getAccessToken();
+  if (!token) throw new Error('Not authenticated. Please sign in again.');
+
+  const url = `https://bigquerydatatransfer.googleapis.com/v1/projects/${project}/locations/us/transferConfigs`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      dataSourceId: 'scheduled_query',
+      displayName,
+      schedule,
+      params: { query: sql },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data?.error?.message || `HTTP ${res.status}`;
+    throw new Error(`Failed to create scheduled query: ${msg}`);
+  }
+
+  return { transferConfigName: data.name || displayName };
+}

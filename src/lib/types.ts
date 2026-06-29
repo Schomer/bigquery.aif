@@ -253,13 +253,17 @@ export interface DataQualityResult {
 
 export interface DataLoadingResult {
   skill: 'data-loading'
-  operationType: 'EXPORT_CSV' | 'EXPORT_SHEETS' | 'SCHEDULE_INFO' | 'NOT_SUPPORTED'
+  operationType: 'EXPORT_CSV' | 'EXPORT_SHEETS' | 'SCHEDULE_INFO' | 'SCHEDULE_CREATED' | 'QUERY_SAVED' | 'SHARE_CLIPBOARD' | 'NOT_SUPPORTED'
   message: string
   csvContent?: string | null
   sheetsUrl?: string | null
   rowCount?: number
   columnCount?: number
   sql?: string | null
+  scheduleName?: string | null
+  scheduleFrequency?: string | null
+  shareText?: string | null
+  savedQueryLabel?: string | null
 }
 
 // ─── Chat message ─────────────────────────────────────────────────────────────
