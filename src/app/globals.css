@@ -590,7 +590,7 @@ details > summary::marker { content: ''; }
   border-left-color: #1A3E8C;
 }
 .gc-nav-item--active .material-symbols-outlined { color: #1A3E8C; }
-.gc-nav-item .material-symbols-outlined { font-size: 20px; color: #5f6368; flex-shrink: 0; }
+.gc-nav-item .material-symbols-outlined { font-size: 20px; color: #444746; flex-shrink: 0; }
 .gc-nav-label { overflow: hidden; text-overflow: ellipsis; }
 
 /* Collapsed nav items */
