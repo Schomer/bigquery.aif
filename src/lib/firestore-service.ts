@@ -3,7 +3,7 @@
 
 import { doc, getDoc, setDoc, deleteField, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import type { ChatMessage, CompositionEnvelope } from './types';
+import type { ChatMessage, CompositionEnvelope, SavedCheck } from './types';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,6 +140,29 @@ export async function saveQuery(uid: string, label: string, sql: string): Promis
   };
   await savePrompt(uid, prompt);
   return id;
+}
+
+// ── Saved Checks (Alerting Tier 0/1) ─────────────────────────────────────────
+
+export async function saveCheck(uid: string, check: SavedCheck): Promise<void> {
+  await setDoc(userDoc(uid), {
+    checks: { [check.id]: check },
+  }, { merge: true });
+}
+
+export async function getChecks(uid: string): Promise<SavedCheck[]> {
+  const state = await getUserData(uid);
+  const checkMap = state.checks || {};
+  const checks: SavedCheck[] = Object.entries(checkMap).map(([id, data]: [string, any]) => {
+    return { ...data, id };
+  });
+  return checks.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+}
+
+export async function deleteCheck(uid: string, id: string): Promise<void> {
+  await updateDoc(userDoc(uid), {
+    [`checks.${id}`]: deleteField(),
+  });
 }
 
 // ── User Preferences ─────────────────────────────────────────────────────────

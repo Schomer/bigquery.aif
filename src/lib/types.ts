@@ -64,6 +64,7 @@ export type ArtifactType =
   | 'DATA_LOADING_VIEW'
   | 'MONITORING_VIEW'
   | 'DISCOVERY_VIEW'
+  | 'ALERT_VIEW'
   | 'MULTISTEP_VIEW';
 
 export interface CompositionEnvelope {
@@ -290,7 +291,7 @@ export interface MonitoringJob {
 
 export interface MonitoringResult {
   skill: 'monitoring'
-  monitoringType: 'JOB_LIST' | 'JOB_STATUS'
+  monitoringType: 'JOB_LIST' | 'JOB_STATUS' | 'ALERT'
   timeRange: { start: string; end: string }
   items: MonitoringJob[]
   summary: {
@@ -298,6 +299,34 @@ export interface MonitoringResult {
     totalBytesProcessed: number
     errorCount: number
   }
+}
+
+// --- Saved Checks & Alerting -------------------------------------------------
+
+export type AlertTier = 'TIER_0' | 'TIER_1';
+
+export interface SavedCheck {
+  id: string;
+  createdAt: string;
+  label: string;
+  sql: string;
+  conditionDescription: string;
+  table?: string;
+  tier: AlertTier;
+  schedule?: string;       // cron expression for Tier 1
+  transferConfigName?: string;  // BigQuery Data Transfer config name for Tier 1
+}
+
+export interface AlertResult {
+  skill: 'monitoring';
+  monitoringType: 'ALERT';
+  alertCategory: 'PROJECT_WIDE' | 'JOB_SPECIFIC' | 'DATA_CONDITION';
+  conditionDescription: string;
+  checkSql?: string;
+  savedCheckId?: string;
+  tier?: AlertTier;
+  guidance?: string;
+  nextActions?: Array<{ label: string; action: string }>;
 }
 
 // ─── Discovery normalized result ──────────────────────────────────────────────

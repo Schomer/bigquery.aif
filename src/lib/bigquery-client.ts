@@ -268,6 +268,7 @@ export async function createScheduledQuery(
   displayName: string,
   sql: string,
   schedule: string,
+  enableFailureEmail?: boolean,
 ): Promise<{ transferConfigName: string }> {
   const token = getAccessToken();
   if (!token) throw new Error('Not authenticated. Please sign in again.');
@@ -284,6 +285,7 @@ export async function createScheduledQuery(
       displayName,
       schedule,
       params: { query: sql },
+      ...(enableFailureEmail ? { emailPreferences: { enableFailureEmail: true } } : {}),
     }),
   });
   const data = await res.json();

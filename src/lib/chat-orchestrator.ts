@@ -15,6 +15,7 @@ import type {
   DqFinding,
   MonitoringJob,
   MonitoringResult,
+  AlertResult,
   DiscoveryResult,
   DiscoverySearchResult,
   DataLoadingResult,
@@ -1695,25 +1696,120 @@ async function handleMonitoring(
     return [compose('monitoring', result)];
   }
 
-  // ALERT -- return actionable gcloud commands
+  // ALERT -- three-way classification per shared-harness-policies SS C
   if (monitoringType === 'ALERT') {
-    const result: MonitoringResult = {
-      skill: 'monitoring',
-      monitoringType: 'JOB_LIST',
-      timeRange: { start: new Date().toISOString(), end: new Date().toISOString() },
-      items: [{
-        jobId: 'alert_info',
-        userEmail: '',
-        statementType: 'INFO',
-        status: 'DONE',
-        createTime: new Date().toISOString(),
-        totalBytesProcessed: 0,
-        errorMessage: `To set up a BigQuery alert, use these approaches:\n\n1. Cost alert (bytes processed):\ngcloud alpha monitoring policies create --notification-channels=CHANNEL_ID --display-name="BQ Cost Alert" --condition-display-name="High bytes processed" --condition-filter='resource.type="bigquery.googleapis.com/Project" AND metric.type="bigquery.googleapis.com/query/scanned_bytes"' --condition-threshold-value=1000000000000 --condition-comparison=COMPARISON_GT\n\n2. Job failure alert:\ngcloud alpha monitoring policies create --display-name="BQ Job Failures" --condition-filter='resource.type="bigquery.googleapis.com/Project" AND metric.type="bigquery.googleapis.com/job/num_in_flight"' --condition-threshold-value=0\n\n3. For data-condition alerts (e.g., row count thresholds), create a scheduled query in the BigQuery Console that runs periodically and sends email notifications.`,
-        referencedTables: [],
-      }],
-      summary: { totalJobs: 0, totalBytesProcessed: 0, errorCount: 0 },
+    const AlertClassSchema = {
+      type: 'OBJECT' as const,
+      properties: {
+        alertCategory: {
+          type: 'STRING' as const,
+          enum: ['PROJECT_WIDE', 'JOB_SPECIFIC', 'DATA_CONDITION'],
+          description: 'PROJECT_WIDE: aggregate system metrics (total slot usage, overall error rate, storage growth). JOB_SPECIFIC: condition about a specific job, schedule, or query pattern. DATA_CONDITION: row-level or column-level data condition (nulls, duplicates, freshness, thresholds).',
+        },
+        conditionDescription: {
+          type: 'STRING' as const,
+          description: 'Plain-English description of what the user wants to be alerted about',
+        },
+        table: {
+          type: 'STRING' as const,
+          description: 'Fully qualified table reference (project.dataset.table) if the condition involves a specific table',
+        },
+        metric: {
+          type: 'STRING' as const,
+          description: 'The metric or column to check (e.g., null_rate, row_count, bytes_processed)',
+        },
+        threshold: {
+          type: 'STRING' as const,
+          description: 'The threshold value if specified (e.g., "> 1000", "< 0.95")',
+        },
+      },
+      required: ['alertCategory', 'conditionDescription'],
     };
-    return [compose('monitoring', result)];
+
+    onStatus?.('Classifying alert type...');
+    const alertClass = await callGemini({
+      systemInstruction: 'You classify BigQuery alert requests into one of three categories: PROJECT_WIDE (aggregate system metrics like slot usage, error rate, storage growth), JOB_SPECIFIC (conditions about specific jobs, schedules, or query patterns), or DATA_CONDITION (row-level or column-level data conditions like nulls, duplicates, freshness, thresholds). Extract the condition description, table, metric, and threshold if mentioned.',
+      prompt: message,
+      schema: AlertClassSchema,
+      project,
+    });
+    const { alertCategory, conditionDescription, table, metric, threshold } = alertClass;
+
+    // --- PROJECT_WIDE: guidance for Cloud Monitoring ---
+    if (alertCategory === 'PROJECT_WIDE') {
+      const result: AlertResult = {
+        skill: 'monitoring',
+        monitoringType: 'ALERT',
+        alertCategory: 'PROJECT_WIDE',
+        conditionDescription,
+        guidance: `To set up a project-wide alert for "${conditionDescription}":\n\n` +
+          `1. Go to Cloud Monitoring > Alerting > Create Policy\n` +
+          `2. Resource type: BigQuery Project\n` +
+          `3. Metric: ${metric || 'Choose the relevant BigQuery metric'}\n` +
+          `4. Condition: ${threshold || 'Set your threshold'}\n\n` +
+          `Or use gcloud:\n` +
+          `gcloud alpha monitoring policies create \\\n` +
+          `  --display-name="${conditionDescription}" \\\n` +
+          `  --condition-filter='resource.type="bigquery.googleapis.com/Project"' \\\n` +
+          `  --condition-threshold-value=${threshold || '<THRESHOLD>'} \\\n` +
+          `  --notification-channels=<CHANNEL_ID>`,
+        nextActions: [
+          { label: 'Show current usage', action: 'show my current slot usage and query costs' },
+        ],
+      };
+      return [compose('monitoring', result)];
+    }
+
+    // --- JOB_SPECIFIC: author SQL check against INFORMATION_SCHEMA.JOBS ---
+    if (alertCategory === 'JOB_SPECIFIC') {
+      const checkSql = `SELECT COUNT(*) as violation_count\nFROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT\nWHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)\n  AND ${metric ? `${metric} ${threshold || '> 0'}` : `error_result IS NOT NULL`}`;
+
+      const result: AlertResult = {
+        skill: 'monitoring',
+        monitoringType: 'ALERT',
+        alertCategory: 'JOB_SPECIFIC',
+        conditionDescription,
+        checkSql,
+        guidance: `This check queries INFORMATION_SCHEMA.JOBS to detect: ${conditionDescription}.\n\nYou can save this as a reusable check (Tier 0) or schedule it to run automatically with email alerts (Tier 1).`,
+        nextActions: [
+          { label: 'Save as check', action: 'save_check' },
+          { label: 'Schedule with email alert', action: 'schedule_check' },
+          { label: 'Run it now', action: checkSql },
+        ],
+      };
+      return [compose('monitoring', result)];
+    }
+
+    // --- DATA_CONDITION: author DQ check SQL ---
+    if (alertCategory === 'DATA_CONDITION') {
+      const targetTable = table || '<project.dataset.table>';
+      let checkSql: string;
+
+      if (metric?.toLowerCase().includes('null')) {
+        checkSql = `SELECT\n  '${metric}' as check_name,\n  COUNTIF(${metric} IS NULL) as null_count,\n  COUNT(*) as total_rows,\n  ROUND(COUNTIF(${metric} IS NULL) / COUNT(*) * 100, 2) as null_pct\nFROM \`${targetTable}\`\nHAVING null_pct ${threshold || '> 5'}`;
+      } else if (metric?.toLowerCase().includes('duplicate') || conditionDescription.toLowerCase().includes('duplicate')) {
+        checkSql = `SELECT COUNT(*) as duplicate_groups\nFROM (\n  SELECT ${metric || '*'}, COUNT(*) as cnt\n  FROM \`${targetTable}\`\n  GROUP BY ${metric || 'ALL'}\n  HAVING cnt > 1\n)\nHAVING duplicate_groups > 0`;
+      } else if (conditionDescription.toLowerCase().includes('fresh') || conditionDescription.toLowerCase().includes('stale')) {
+        checkSql = `SELECT\n  TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(${metric || 'created_at'}), HOUR) as hours_since_update\nFROM \`${targetTable}\`\nHAVING hours_since_update ${threshold || '> 24'}`;
+      } else {
+        checkSql = `SELECT COUNT(*) as violation_count\nFROM \`${targetTable}\`\nWHERE ${metric || '1=1'} ${threshold || ''}`;
+      }
+
+      const result: AlertResult = {
+        skill: 'monitoring',
+        monitoringType: 'ALERT',
+        alertCategory: 'DATA_CONDITION',
+        conditionDescription,
+        checkSql,
+        guidance: `This check monitors: ${conditionDescription}.\n\nSave it as a reusable check you can run anytime (Tier 0), or schedule it to run automatically with email notifications when the condition is violated (Tier 1).`,
+        nextActions: [
+          { label: 'Save as check', action: 'save_check' },
+          { label: 'Schedule with email alert', action: 'schedule_check' },
+          { label: 'Run it now', action: checkSql },
+        ],
+      };
+      return [compose('monitoring', result)];
+    }
   }
 
   // Helper: BigQuery timestamps may be epoch-ms numbers, {value:'...'} objects, or ISO strings

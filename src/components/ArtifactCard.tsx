@@ -11,6 +11,7 @@ import { CostConfirmCard } from './CostConfirmCard';
 import { DiscoveryView } from './DiscoveryView';
 import { DataQualityView } from './DataQualityView';
 import { MonitoringView } from './MonitoringView';
+import AlertView from './AlertView';
 import { DataLoadingView } from './DataLoadingView';
 import { MultistepView } from './MultistepView';
 import { useState } from 'react';
@@ -289,6 +290,8 @@ function Artifact({
       return <DiscoveryView result={data as import('@/lib/types').DiscoveryResult} onSendMessage={onSendMessage} />;
     case 'DATA_QUALITY_VIEW':
       return <DataQualityView result={data as import('@/lib/types').DataQualityResult} onSendMessage={onSendMessage} />;
+    case 'ALERT_VIEW':
+      return <AlertView data={data as import('@/lib/types').AlertResult} onAction={onSendMessage} />;
     case 'MONITORING_VIEW':
       return <MonitoringView result={data as import('@/lib/types').MonitoringResult} onSendMessage={onSendMessage} />;
     case 'DATA_LOADING_VIEW':

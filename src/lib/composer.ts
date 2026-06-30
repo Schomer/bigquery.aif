@@ -18,6 +18,7 @@ import type {
   QueryResult,
   DataManagementResult,
   MonitoringResult,
+  AlertResult,
   DiscoveryResult,
   DataQualityResult,
   DataLoadingResult,
@@ -32,7 +33,7 @@ import type {
 
 export function compose(
   skill: SkillName,
-  result: SchemaResult | QueryResult | DataManagementResult | MonitoringResult | DiscoveryResult | DataQualityResult | DataLoadingResult
+  result: SchemaResult | QueryResult | DataManagementResult | MonitoringResult | AlertResult | DiscoveryResult | DataQualityResult | DataLoadingResult
 ): CompositionEnvelope {
   switch (skill) {
     case 'schema':
@@ -41,8 +42,11 @@ export function compose(
       return composeQuery(result as QueryResult);
     case 'data-management':
       return composeDataManagement(result as DataManagementResult);
-    case 'monitoring':
-      return composeMonitoring(result as MonitoringResult);
+    case 'monitoring': {
+      const monRes = result as MonitoringResult | AlertResult;
+      if ('alertCategory' in monRes) return composeAlert(monRes as AlertResult);
+      return composeMonitoring(monRes as MonitoringResult);
+    }
     case 'discovery':
       return composeDiscovery(result as DiscoveryResult);
     case 'data-quality':
@@ -362,6 +366,45 @@ function composeMonitoring(result: MonitoringResult): CompositionEnvelope {
       visibility: 'COLLAPSED',
       sql: `SELECT job_id, user_email, statement_type, state, creation_time, total_bytes_processed, error_result, referenced_tables FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR) ORDER BY creation_time DESC LIMIT 50`,
     },
+    nextActions,
+  };
+}
+
+// ─── Alert composition ────────────────────────────────────────────────────────
+
+function composeAlert(result: AlertResult): CompositionEnvelope {
+  const id = randomUUID();
+
+  const categoryLabels: Record<string, string> = {
+    PROJECT_WIDE: 'Project-wide alert',
+    JOB_SPECIFIC: 'Job-specific check',
+    DATA_CONDITION: 'Data condition check',
+  };
+
+  const headlineText = `${categoryLabels[result.alertCategory] || 'Alert'}: ${result.conditionDescription}`;
+  const tone: Tone = 'NEUTRAL';
+
+  const nextActions: HandoffEnvelope[] = [];
+  if (result.nextActions) {
+    for (const na of result.nextActions) {
+      nextActions.push({
+        targetSkill: 'monitoring',
+        label: na.label,
+        context: { action: na.action },
+        sourceSkill: 'monitoring',
+        sourceResultRef: id,
+      });
+    }
+  }
+
+  return {
+    id,
+    skill: 'monitoring',
+    headline: { text: headlineText, tone, basis: 'STATUS' },
+    primaryArtifact: { type: 'ALERT_VIEW', data: result },
+    provenance: result.checkSql
+      ? { visibility: 'COLLAPSED', sql: result.checkSql }
+      : { visibility: 'COLLAPSED' },
     nextActions,
   };
 }
