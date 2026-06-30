@@ -76,10 +76,11 @@ export function SideNav({ collapsed }: SideNavProps) {
   );
 
 
+  const uid = user?.uid;
   const loadConvs = useCallback(() => {
-    if (!user) return;
-    getConversations(user.uid).then(setConversations).catch(() => {});
-  }, [user]);
+    if (!uid) return;
+    getConversations(uid).then(setConversations).catch(() => {});
+  }, [uid]);
 
   useEffect(() => { loadConvs(); }, [loadConvs]);
 

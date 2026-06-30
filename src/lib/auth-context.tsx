@@ -11,6 +11,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react';
 import {
@@ -71,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeProject, setActiveProjectState] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const prevUserRef = useRef<GoogleUser | null>(null);
 
   // Sync token to both React state and the module-level store
   const setAccessToken = useCallback((token: string | null) => {
@@ -78,24 +80,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessTokenState(token);
   }, []);
 
+  // Only update user state when the actual user data has changed,
+  // not on every onAuthStateChanged callback (which fires on token refresh).
+  const setUserStable = useCallback((next: GoogleUser | null) => {
+    const prev = prevUserRef.current;
+    if (prev === next) return;
+    if (prev && next && prev.uid === next.uid && prev.name === next.name && prev.email === next.email && prev.picture === next.picture) return;
+    prevUserRef.current = next;
+    setUser(next);
+  }, []);
+
   // Listen for Firebase Auth state changes
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (fbUser) => {
       if (fbUser) {
-        setUser(toGoogleUser(fbUser));
+        setUserStable(toGoogleUser(fbUser));
         // Restore token from sessionStorage if available
         const storedToken = getAccessToken();
         if (storedToken) {
           setAccessTokenState(storedToken);
         }
       } else {
-        setUser(null);
+        setUserStable(null);
         setAccessToken(null);
       }
       setIsLoading(false);
     });
     return unsub;
-  }, [setAccessToken]);
+  }, [setAccessToken, setUserStable]);
 
   // Load active project from localStorage
   useEffect(() => {
