@@ -1979,12 +1979,11 @@ async function handleMonitoring(
       };
       return [compose('monitoring', result as unknown as MonitoringResult)];
     } catch {
-      const result: MonitoringResult = {
+      const result: import('./types').StorageBreakdownResult = {
         skill: 'monitoring', monitoringType: 'STORAGE_BREAKDOWN',
-        timeRange: { start: new Date().toISOString(), end: new Date().toISOString() },
-        items: [], summary: { totalJobs: 0, totalBytesProcessed: 0, errorCount: 0 },
+        project, totalBytes: 0, items: [],
       };
-      return [compose('monitoring', result)];
+      return [compose('monitoring', result as unknown as MonitoringResult)];
     }
   }
 
