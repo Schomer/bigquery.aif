@@ -395,23 +395,8 @@ function composeAlert(result: AlertResult): CompositionEnvelope {
   const headlineText = `${categoryLabels[result.alertCategory] || 'Alert'}: ${result.conditionDescription}`;
   const tone: Tone = 'NEUTRAL';
 
-  const nextActions: HandoffEnvelope[] = [];
-  if (result.nextActions) {
-    for (const na of result.nextActions) {
-      nextActions.push({
-        targetSkill: 'monitoring',
-        label: na.label,
-        context: {
-          action: na.action,
-          checkSql: result.checkSql,
-          conditionDescription: result.conditionDescription,
-          alertCategory: result.alertCategory,
-        },
-        sourceSkill: 'monitoring',
-        sourceResultRef: id,
-      });
-    }
-  }
+
+
 
   return {
     id,
@@ -421,7 +406,7 @@ function composeAlert(result: AlertResult): CompositionEnvelope {
     provenance: result.checkSql
       ? { visibility: 'COLLAPSED', sql: result.checkSql }
       : { visibility: 'COLLAPSED' },
-    nextActions,
+    nextActions: [],
   };
 }
 
