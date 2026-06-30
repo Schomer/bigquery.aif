@@ -149,19 +149,27 @@ async function main() {
 
   if (needsProject) {
     console.log('No project selected. Selecting project...');
-    // Click the project picker button in the top bar
     const projectBtn = await page.$('button.gc-env-chip');
     if (projectBtn) {
       await projectBtn.click();
       console.log('  Opened project dropdown.');
+      await page.waitForTimeout(1000);
 
-      // Wait for project options to appear (they load asynchronously)
-      try {
-        await page.waitForSelector('.gc-project-option', { timeout: 15000 });
-        console.log('  Project options loaded.');
-      } catch {
-        console.log('  Waiting longer for projects...');
-        await page.waitForTimeout(5000);
+      // Type 'malloy-data' into the search field to trigger live search
+      const searchInput = await page.$('.gc-project-search-input');
+      if (searchInput) {
+        await searchInput.click();
+        await searchInput.fill('malloy-data');
+        console.log('  Typed "malloy-data" in search field. Waiting for results...');
+
+        // Wait for search results to appear (live search is debounced)
+        try {
+          await page.waitForSelector('.gc-project-option', { timeout: 20000 });
+          console.log('  Search results loaded.');
+        } catch {
+          console.log('  No search results appeared. Retrying...');
+          await page.waitForTimeout(5000);
+        }
       }
 
       // Screenshot the dropdown state for debugging
@@ -170,19 +178,9 @@ async function main() {
         fullPage: false, type: 'png',
       });
 
-      // Click the first gc-project-option button (or one matching malloy-data)
+      // Click the first project option
       const clicked = await page.evaluate(() => {
         const options = document.querySelectorAll('.gc-project-option');
-        // First look for malloy-data
-        for (const opt of options) {
-          const label = opt.querySelector('.gc-project-option-label');
-          const text = label ? label.textContent : opt.textContent;
-          if (text && (text.includes('malloy-data') || text.includes('Malloy'))) {
-            opt.click();
-            return text.trim();
-          }
-        }
-        // Fallback: click first option
         if (options.length > 0) {
           options[0].click();
           const label = options[0].querySelector('.gc-project-option-label');
@@ -194,7 +192,7 @@ async function main() {
       if (clicked) {
         console.log(`  Selected project: ${clicked}`);
       } else {
-        console.log('  No project options found in dropdown.');
+        console.log('  No project options found. Will try direct navigation.');
       }
 
       await page.waitForTimeout(3000);

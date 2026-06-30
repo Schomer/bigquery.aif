@@ -56,6 +56,47 @@ export function handleAuthError() {
   }
 }
 
+// ─── Region detection ─────────────────────────────────────────────────────────
+
+const regionCache = new Map<string, string>();
+let regionPromiseCache = new Map<string, Promise<string>>();
+
+/**
+ * Detect the BigQuery region for a project by inspecting its datasets.
+ * Returns a lowercase location string (e.g. 'us', 'eu', 'us-central1').
+ * Caches per project. Falls back to 'us' when no datasets exist.
+ */
+export async function detectBqRegion(project: string): Promise<string> {
+  if (!project) return 'us';
+  const cached = regionCache.get(project);
+  if (cached) return cached;
+
+  // Deduplicate in-flight requests for the same project
+  const inflight = regionPromiseCache.get(project);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    try {
+      const data = await bqFetch(
+        `${BQ_BASE}/${encodeURIComponent(project)}/datasets?maxResults=1`
+      );
+      const datasets = data.datasets || [];
+      const location = (datasets[0]?.location || 'us').toLowerCase();
+      regionCache.set(project, location);
+      return location;
+    } catch {
+      // If the API call fails, default to 'us'
+      regionCache.set(project, 'us');
+      return 'us';
+    } finally {
+      regionPromiseCache.delete(project);
+    }
+  })();
+
+  regionPromiseCache.set(project, promise);
+  return promise;
+}
+
 // ─── Parse BigQuery query response into flat rows ─────────────────────────────
 
 function parseQueryResponse(data: any): {

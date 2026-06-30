@@ -5,7 +5,7 @@
 import { classifyIntent, resolveReferences } from './router';
 import { fetchSchema } from './skills/schema';
 import { compose } from './composer';
-import { dryRun, executeQuery, executeDml, exportToSheets, createScheduledQuery } from './bigquery-client';
+import { dryRun, executeQuery, executeDml, exportToSheets, createScheduledQuery, detectBqRegion } from './bigquery-client';
 import { saveQuery as firestoreSaveQuery, saveCheck } from './firestore-service';
 import type {
   ChatMessage,
@@ -672,6 +672,7 @@ function tryFastEnrichment(
   message: string,
   project: string,
   resolvedDataset: string | undefined,
+  region: string,
 ): FastEnrichResult | null {
   const lower = message.toLowerCase();
   const isProjectScope = !resolvedDataset;
@@ -681,21 +682,21 @@ function tryFastEnrichment(
     // "list datasets with the number of tables" / "datasets and their table count"
     if (/\b(table|tables)\b/i.test(lower) && /\b(count|number|how\s+many|each)\b/i.test(lower)) {
       return {
-        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count FROM \`${project}\`.\`region-us\`.INFORMATION_SCHEMA.TABLES GROUP BY table_schema ORDER BY table_count DESC`,
+        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count FROM \`${project}\`.\`region-${region}\`.INFORMATION_SCHEMA.TABLES GROUP BY table_schema ORDER BY table_count DESC`,
         resultSummary: `Datasets in ${project} with number of tables in each`,
       };
     }
     // "datasets with size" / "datasets sorted by size" / "largest datasets"
     if (/\b(size|bytes|storage|largest|biggest|smallest)\b/i.test(lower)) {
       return {
-        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count, SUM(total_logical_bytes) AS total_size_bytes, SUM(total_rows) AS total_rows FROM \`${project}\`.\`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE GROUP BY table_schema ORDER BY total_size_bytes DESC`,
+        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count, SUM(total_logical_bytes) AS total_size_bytes, SUM(total_rows) AS total_rows FROM \`${project}\`.\`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE GROUP BY table_schema ORDER BY total_size_bytes DESC`,
         resultSummary: `Datasets in ${project} with size and row counts`,
       };
     }
     // "datasets with row count" / "datasets and how many rows"
     if (/\b(row|rows|row.?count)\b/i.test(lower)) {
       return {
-        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count, SUM(total_rows) AS total_rows FROM \`${project}\`.\`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE GROUP BY table_schema ORDER BY total_rows DESC`,
+        sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count, SUM(total_rows) AS total_rows FROM \`${project}\`.\`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE GROUP BY table_schema ORDER BY total_rows DESC`,
         resultSummary: `Datasets in ${project} with table and row counts`,
       };
     }
@@ -891,7 +892,8 @@ async function handleSchema(
   // includes table counts and all metadata the user needs, so SQL is unnecessary.
   if (!table && resolvedDataset && ENRICHMENT_PATTERNS.some((p) => p.test(message))) {
     // Fast-path: generate SQL directly for common enrichment patterns
-    const fastResult = tryFastEnrichment(message, project, resolvedDataset);
+    const bqRegion = await detectBqRegion(project);
+    const fastResult = tryFastEnrichment(message, project, resolvedDataset, bqRegion);
     if (fastResult) {
       onStatus?.(`Running INFORMATION_SCHEMA query against ${resolvedDataset || project}...`);
       const executed = await executeQuery(fastResult.sql, project);
@@ -1588,6 +1590,7 @@ async function handleMonitoring(
   onStatus?: (status: string) => void
 ): Promise<CompositionEnvelope[]> {
   const project = context?.project || '';
+  const region = await detectBqRegion(project);
   const uid = context?.uid;
   const hc = context?.handoffContext;
 
@@ -1715,7 +1718,7 @@ async function handleMonitoring(
 
   // STORAGE — query INFORMATION_SCHEMA.TABLE_STORAGE
   if (monitoringType === 'STORAGE') {
-    const storageSql = `SELECT table_schema, table_name, total_rows, total_logical_bytes, active_logical_bytes FROM \`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE WHERE project_id = '${project}' ORDER BY total_logical_bytes DESC LIMIT 50`;
+    const storageSql = `SELECT table_schema, table_name, total_rows, total_logical_bytes, active_logical_bytes FROM \`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE WHERE project_id = '${project}' ORDER BY total_logical_bytes DESC LIMIT 50`;
     onStatus?.(`Fetching storage usage for project ${project}...`);
     const executed = await executeQuery(storageSql, project);
 
@@ -1747,7 +1750,7 @@ async function handleMonitoring(
 
   // SLOTS — query INFORMATION_SCHEMA.JOBS_TIMELINE for slot usage
   if (monitoringType === 'SLOTS') {
-    const slotsSql = `SELECT period_start, SUM(period_slot_ms) AS total_slot_ms, COUNT(DISTINCT job_id) AS concurrent_jobs FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT WHERE period_start > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR) GROUP BY period_start ORDER BY period_start DESC LIMIT 100`;
+    const slotsSql = `SELECT period_start, SUM(period_slot_ms) AS total_slot_ms, COUNT(DISTINCT job_id) AS concurrent_jobs FROM \`region-${region}\`.INFORMATION_SCHEMA.JOBS_TIMELINE_BY_PROJECT WHERE period_start > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR) GROUP BY period_start ORDER BY period_start DESC LIMIT 100`;
     onStatus?.(`Fetching slot utilization for project ${project}...`);
     const executed = await executeQuery(slotsSql, project);
 
@@ -1865,7 +1868,7 @@ async function handleMonitoring(
 
     // --- JOB_SPECIFIC: author SQL check against INFORMATION_SCHEMA.JOBS ---
     if (alertCategory === 'JOB_SPECIFIC') {
-      const checkSql = `SELECT COUNT(*) as violation_count\nFROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT\nWHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)\n  AND ${metric ? `${metric} ${threshold || '> 0'}` : `error_result IS NOT NULL`}`;
+      const checkSql = `SELECT COUNT(*) as violation_count\nFROM \`region-${region}\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT\nWHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)\n  AND ${metric ? `${metric} ${threshold || '> 0'}` : `error_result IS NOT NULL`}`;
 
       const result: AlertResult = {
         skill: 'monitoring',
@@ -1943,7 +1946,7 @@ async function handleMonitoring(
 
   // STORAGE_BREAKDOWN -- hierarchical treemap of storage by dataset and table
   if (monitoringType === 'STORAGE_BREAKDOWN') {
-    const storageSql = `SELECT table_schema, table_name, total_rows, total_logical_bytes FROM \`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE WHERE project_id = '${project}' ORDER BY total_logical_bytes DESC LIMIT 200`;
+    const storageSql = `SELECT table_schema, table_name, total_rows, total_logical_bytes FROM \`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE WHERE project_id = '${project}' ORDER BY total_logical_bytes DESC LIMIT 200`;
     onStatus?.(`Fetching storage breakdown for project ${project}...`);
     try {
       const executed = await executeQuery(storageSql, project);
@@ -1987,7 +1990,7 @@ async function handleMonitoring(
 
   // ACCESS_PATTERNS -- who queries which tables
   if (monitoringType === 'ACCESS_PATTERNS') {
-    const accessSql = `SELECT user_email, referenced_tables, COUNT(*) AS query_count, SUM(total_bytes_processed) AS total_bytes, MAX(creation_time) AS last_accessed FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) AND statement_type = 'SELECT' AND referenced_tables IS NOT NULL GROUP BY user_email, referenced_tables ORDER BY query_count DESC LIMIT 200`;
+    const accessSql = `SELECT user_email, referenced_tables, COUNT(*) AS query_count, SUM(total_bytes_processed) AS total_bytes, MAX(creation_time) AS last_accessed FROM \`region-${region}\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) AND statement_type = 'SELECT' AND referenced_tables IS NOT NULL GROUP BY user_email, referenced_tables ORDER BY query_count DESC LIMIT 200`;
     onStatus?.(`Analyzing access patterns for project ${project}...`);
     try {
       const executed = await executeQuery(accessSql, project);
@@ -2033,7 +2036,7 @@ async function handleMonitoring(
 
   // COST_ANALYSIS -- query costs over time by user
   if (monitoringType === 'COST_ANALYSIS') {
-    const costSql = `SELECT DATE(creation_time) AS period, user_email, SUM(total_bytes_processed) AS total_bytes, COUNT(*) AS job_count FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) AND total_bytes_processed > 0 GROUP BY period, user_email ORDER BY period DESC, total_bytes DESC LIMIT 500`;
+    const costSql = `SELECT DATE(creation_time) AS period, user_email, SUM(total_bytes_processed) AS total_bytes, COUNT(*) AS job_count FROM \`region-${region}\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) AND total_bytes_processed > 0 GROUP BY period, user_email ORDER BY period DESC, total_bytes DESC LIMIT 500`;
     onStatus?.(`Analyzing query costs for project ${project}...`);
     try {
       const executed = await executeQuery(costSql, project);
@@ -2076,7 +2079,7 @@ async function handleMonitoring(
     const dataset = (hc?.dataset as string) || '';
     const freshnessSql = dataset
       ? `SELECT table_schema, table_name, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, total_rows FROM \`${project}.${dataset}\`.INFORMATION_SCHEMA.TABLES ORDER BY last_modified_time ASC LIMIT 100`
-      : `SELECT table_schema, table_name, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, total_rows FROM \`region-us\`.INFORMATION_SCHEMA.TABLE_STORAGE WHERE project_id = '${project}' ORDER BY last_modified_time ASC LIMIT 100`;
+      : `SELECT table_schema, table_name, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, total_rows FROM \`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE WHERE project_id = '${project}' ORDER BY last_modified_time ASC LIMIT 100`;
     onStatus?.(`Checking data freshness${dataset ? ` for ${dataset}` : ''}...`);
     try {
       const executed = await executeQuery(freshnessSql, project);
@@ -2113,7 +2116,7 @@ async function handleMonitoring(
   }
 
   // JOBS (default) — existing INFORMATION_SCHEMA.JOBS query
-  const sql = `SELECT job_id, user_email, statement_type, state, creation_time, total_bytes_processed, error_result, referenced_tables FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR) ORDER BY creation_time DESC LIMIT 50`;
+  const sql = `SELECT job_id, user_email, statement_type, state, creation_time, total_bytes_processed, error_result, referenced_tables FROM \`region-${region}\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR) ORDER BY creation_time DESC LIMIT 50`;
 
   onStatus?.(`Fetching last 24h of job history for project ${project}...`);
   const executed = await executeQuery(sql, project);
@@ -2932,7 +2935,8 @@ async function handleDiscovery(
     const tableLower = tableName.toLowerCase().replace(/`/g, '');
     onStatus?.(`Tracing lineage for "${tableName}"...`);
 
-    const lineageSql = `SELECT job_id, user_email, statement_type, creation_time, destination_table, referenced_tables FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) AND (LOWER(CAST(destination_table AS STRING)) LIKE '%${tableLower}%' OR LOWER(CAST(referenced_tables AS STRING)) LIKE '%${tableLower}%') ORDER BY creation_time DESC LIMIT 50`;
+    const lineageRegion = await detectBqRegion(project);
+    const lineageSql = `SELECT job_id, user_email, statement_type, creation_time, destination_table, referenced_tables FROM \`region-${lineageRegion}\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) AND (LOWER(CAST(destination_table AS STRING)) LIKE '%${tableLower}%' OR LOWER(CAST(referenced_tables AS STRING)) LIKE '%${tableLower}%') ORDER BY creation_time DESC LIMIT 50`;
 
     let readsFrom: string[] = [];
     let writtenBy: string[] = [];
