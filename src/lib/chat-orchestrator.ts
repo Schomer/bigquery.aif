@@ -1946,11 +1946,40 @@ async function handleMonitoring(
   // STORAGE_BREAKDOWN -- hierarchical treemap of storage by dataset and table
   if (monitoringType === 'STORAGE_BREAKDOWN') {
     const storageSql = `SELECT table_schema, table_name, total_rows, total_logical_bytes FROM \`${project}\`.\`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE ORDER BY total_logical_bytes DESC LIMIT 200`;
-    onStatus?.(`Fetching storage breakdown for project ${project}...`);
-    console.log('[STORAGE_BREAKDOWN] region:', region, 'sql:', storageSql);
+    onStatus?.(`Fetching storage breakdown for project ${project} (region: ${region})...`);
     try {
       const executed = await executeQuery(storageSql, project);
-      console.log('[STORAGE_BREAKDOWN] rows returned:', executed.rows.length);
+      if (executed.rows.length === 0) {
+        // TABLE_STORAGE returned 0 rows -- fall back to REST API approach
+        onStatus?.(`TABLE_STORAGE empty, using REST API fallback...`);
+        const { listDatasets, listTables } = await import('./bigquery-client');
+        const datasets = await listDatasets(project);
+        const items: import('./types').StorageItem[] = [];
+        let totalBytes = 0;
+        for (const ds of datasets.slice(0, 20)) {
+          const dsId = ds.datasetId || ds.id || '';
+          const tables = await listTables(project, dsId);
+          let dsBytes = 0;
+          let dsRows = 0;
+          const children: import('./types').StorageItem[] = [];
+          for (const t of tables) {
+            const tBytes = Number(t.numBytes || 0);
+            const tRows = Number(t.numRows || 0);
+            dsBytes += tBytes;
+            dsRows += tRows;
+            children.push({ ref: `${project}.${dsId}.${t.tableId}`, label: t.tableId || '', sizeBytes: tBytes, rowCount: tRows, type: 'TABLE' as const });
+          }
+          children.sort((a, b) => b.sizeBytes - a.sizeBytes);
+          totalBytes += dsBytes;
+          items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: dsBytes, rowCount: dsRows, type: 'DATASET' as const, children });
+        }
+        items.sort((a, b) => b.sizeBytes - a.sizeBytes);
+        const result: import('./types').StorageBreakdownResult = {
+          skill: 'monitoring', monitoringType: 'STORAGE_BREAKDOWN',
+          project, totalBytes, items,
+        };
+        return [compose('monitoring', result as unknown as MonitoringResult)];
+      }
       const datasetMap = new Map<string, { sizeBytes: number; rowCount: number; tables: Array<{ ref: string; label: string; sizeBytes: number; rowCount: number }> }>();
       for (const row of executed.rows) {
         const ds = String(row[0] ?? '');
@@ -1980,12 +2009,43 @@ async function handleMonitoring(
       };
       return [compose('monitoring', result as unknown as MonitoringResult)];
     } catch (err) {
-      console.error('[STORAGE_BREAKDOWN] query failed:', err);
-      const result: import('./types').StorageBreakdownResult = {
-        skill: 'monitoring', monitoringType: 'STORAGE_BREAKDOWN',
-        project, totalBytes: 0, items: [],
-      };
-      return [compose('monitoring', result as unknown as MonitoringResult)];
+      // TABLE_STORAGE query failed -- fall back to REST API
+      onStatus?.(`Query failed: ${err instanceof Error ? err.message : String(err)}. Trying REST API...`);
+      try {
+        const { listDatasets, listTables } = await import('./bigquery-client');
+        const datasets = await listDatasets(project);
+        const items: import('./types').StorageItem[] = [];
+        let totalBytes = 0;
+        for (const ds of datasets.slice(0, 20)) {
+          const dsId = ds.datasetId || ds.id || '';
+          const tables = await listTables(project, dsId);
+          let dsBytes = 0;
+          let dsRows = 0;
+          const children: import('./types').StorageItem[] = [];
+          for (const t of tables) {
+            const tBytes = Number(t.numBytes || 0);
+            const tRows = Number(t.numRows || 0);
+            dsBytes += tBytes;
+            dsRows += tRows;
+            children.push({ ref: `${project}.${dsId}.${t.tableId}`, label: t.tableId || '', sizeBytes: tBytes, rowCount: tRows, type: 'TABLE' as const });
+          }
+          children.sort((a, b) => b.sizeBytes - a.sizeBytes);
+          totalBytes += dsBytes;
+          items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: dsBytes, rowCount: dsRows, type: 'DATASET' as const, children });
+        }
+        items.sort((a, b) => b.sizeBytes - a.sizeBytes);
+        const result: import('./types').StorageBreakdownResult = {
+          skill: 'monitoring', monitoringType: 'STORAGE_BREAKDOWN',
+          project, totalBytes, items,
+        };
+        return [compose('monitoring', result as unknown as MonitoringResult)];
+      } catch {
+        const result: import('./types').StorageBreakdownResult = {
+          skill: 'monitoring', monitoringType: 'STORAGE_BREAKDOWN',
+          project, totalBytes: 0, items: [],
+        };
+        return [compose('monitoring', result as unknown as MonitoringResult)];
+      }
     }
   }
 

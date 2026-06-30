@@ -97,6 +97,31 @@ export async function detectBqRegion(project: string): Promise<string> {
   return promise;
 }
 
+// ─── List datasets and tables via REST API ────────────────────────────────────
+
+export async function listDatasets(project: string): Promise<Array<{ datasetId: string; id: string; location: string }>> {
+  const data = await bqFetch(
+    `${BQ_BASE}/${encodeURIComponent(project)}/datasets?maxResults=50`
+  );
+  return (data.datasets || []).map((ds: any) => ({
+    datasetId: ds.datasetReference?.datasetId || '',
+    id: ds.id || '',
+    location: ds.location || 'US',
+  }));
+}
+
+export async function listTables(project: string, datasetId: string): Promise<Array<{ tableId: string; numBytes: string; numRows: string; type: string }>> {
+  const data = await bqFetch(
+    `${BQ_BASE}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(datasetId)}/tables?maxResults=200`
+  );
+  return (data.tables || []).map((t: any) => ({
+    tableId: t.tableReference?.tableId || '',
+    numBytes: t.numBytes || '0',
+    numRows: t.numRows || '0',
+    type: t.type || 'TABLE',
+  }));
+}
+
 // ─── Parse BigQuery query response into flat rows ─────────────────────────────
 
 function parseQueryResponse(data: any): {
