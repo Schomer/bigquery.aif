@@ -1018,11 +1018,10 @@ export default function Home() {
                           style={{
                             maxWidth: '70%',
                             background: 'var(--accent-dim)',
-                            border: '1px solid #c5d8fb',
                             borderRadius: '16px 16px 4px 16px',
                             padding: '10px 16px',
                             fontSize: 14,
-                            color: '#0d3b7a',
+                            color: '#3c4043',
                             lineHeight: 1.5,
                             cursor: loading ? 'default' : 'text',
                             userSelect: 'text',
