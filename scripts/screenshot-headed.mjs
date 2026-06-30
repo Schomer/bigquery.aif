@@ -153,22 +153,40 @@ async function main() {
     const projectBtn = await page.$('button.gc-env-chip');
     if (projectBtn) {
       await projectBtn.click();
-      await page.waitForTimeout(2000);
+      console.log('  Opened project dropdown.');
 
-      // Wait for the dropdown to appear and click the first project
+      // Wait for project options to appear (they load asynchronously)
+      try {
+        await page.waitForSelector('.gc-project-option', { timeout: 15000 });
+        console.log('  Project options loaded.');
+      } catch {
+        console.log('  Waiting longer for projects...');
+        await page.waitForTimeout(5000);
+      }
+
+      // Screenshot the dropdown state for debugging
+      await page.screenshot({
+        path: join(SCREENSHOTS_DIR, '00_dropdown_debug.png'),
+        fullPage: false, type: 'png',
+      });
+
+      // Click the first gc-project-option button (or one matching malloy-data)
       const clicked = await page.evaluate(() => {
-        const items = document.querySelectorAll('[role="listbox"] [role="option"], .gc-project-dropdown button, .gc-project-dropdown [role="option"]');
-        for (const item of items) {
-          const text = item.textContent || '';
-          if (text.includes('malloy-data') || text.includes('Malloy')) {
-            item.click();
+        const options = document.querySelectorAll('.gc-project-option');
+        // First look for malloy-data
+        for (const opt of options) {
+          const label = opt.querySelector('.gc-project-option-label');
+          const text = label ? label.textContent : opt.textContent;
+          if (text && (text.includes('malloy-data') || text.includes('Malloy'))) {
+            opt.click();
             return text.trim();
           }
         }
-        // If no specific match, click the first available project
-        if (items.length > 0) {
-          items[0].click();
-          return items[0].textContent?.trim() || 'first item';
+        // Fallback: click first option
+        if (options.length > 0) {
+          options[0].click();
+          const label = options[0].querySelector('.gc-project-option-label');
+          return (label ? label.textContent : options[0].textContent)?.trim() || 'first';
         }
         return null;
       });
@@ -176,16 +194,12 @@ async function main() {
       if (clicked) {
         console.log(`  Selected project: ${clicked}`);
       } else {
-        console.log('  Could not find a project in dropdown. Trying text click...');
-        // Try clicking any element that contains "malloy" text
-        const malloyEl = await page.$('text=malloy-data');
-        if (malloyEl) {
-          await malloyEl.click();
-          console.log('  Clicked malloy-data text element.');
-        }
+        console.log('  No project options found in dropdown.');
       }
 
       await page.waitForTimeout(3000);
+    } else {
+      console.log('  Could not find project picker button.');
     }
 
     // Wait for textarea to become enabled
