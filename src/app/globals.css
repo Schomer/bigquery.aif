@@ -577,7 +577,8 @@ details > summary::marker { content: ''; }
   padding: 0 14px; height: 36px; flex: 1; min-width: 0;
   border-radius: 0 12px 12px 0;
   border-left: 4px solid transparent;
-  color: var(--gc-text-secondary); font-size: 14px; font-weight: 400;
+  color: #5f6368; font-size: 14px; font-weight: 400;
+  font-family: 'Google Sans Text', 'Google Sans', 'Roboto', sans-serif;
   transition: background .15s, border-left-color .15s;
   white-space: nowrap; overflow: hidden;
   text-decoration: none; cursor: pointer;
@@ -589,7 +590,7 @@ details > summary::marker { content: ''; }
   border-left-color: #1A3E8C;
 }
 .gc-nav-item--active .material-symbols-outlined { color: #1A3E8C; }
-.gc-nav-item .material-symbols-outlined { font-size: 20px; color: var(--gc-icon); flex-shrink: 0; }
+.gc-nav-item .material-symbols-outlined { font-size: 20px; color: #5f6368; flex-shrink: 0; }
 .gc-nav-label { overflow: hidden; text-overflow: ellipsis; }
 
 /* Collapsed nav items */
