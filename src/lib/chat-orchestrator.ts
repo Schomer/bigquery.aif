@@ -1950,28 +1950,37 @@ async function handleMonitoring(
     try {
       const executed = await executeQuery(storageSql, project);
       if (executed.rows.length === 0) {
-        // TABLE_STORAGE returned 0 rows -- fall back to REST API approach
-        onStatus?.(`TABLE_STORAGE empty, using REST API fallback...`);
-        const { listDatasets, listTables } = await import('./bigquery-client');
+        // TABLE_STORAGE returned 0 rows -- fall back to __TABLES__ per dataset
+        onStatus?.(`TABLE_STORAGE empty, querying per-dataset metadata...`);
+        const { listDatasets } = await import('./bigquery-client');
         const datasets = await listDatasets(project);
         const items: import('./types').StorageItem[] = [];
         let totalBytes = 0;
         for (const ds of datasets.slice(0, 20)) {
           const dsId = ds.datasetId || ds.id || '';
-          const tables = await listTables(project, dsId);
-          let dsBytes = 0;
-          let dsRows = 0;
-          const children: import('./types').StorageItem[] = [];
-          for (const t of tables) {
-            const tBytes = Number(t.numBytes || 0);
-            const tRows = Number(t.numRows || 0);
-            dsBytes += tBytes;
-            dsRows += tRows;
-            children.push({ ref: `${project}.${dsId}.${t.tableId}`, label: t.tableId || '', sizeBytes: tBytes, rowCount: tRows, type: 'TABLE' as const });
+          try {
+            const tablesMeta = await executeQuery(
+              `SELECT table_id, row_count, size_bytes FROM \`${project}.${dsId}.__TABLES__\``,
+              project
+            );
+            let dsBytes = 0;
+            let dsRows = 0;
+            const children: import('./types').StorageItem[] = [];
+            for (const row of tablesMeta.rows) {
+              const tId = String(row[0] ?? '');
+              const tRows = Number(row[1] ?? 0);
+              const tBytes = Number(row[2] ?? 0);
+              dsBytes += tBytes;
+              dsRows += tRows;
+              children.push({ ref: `${project}.${dsId}.${tId}`, label: tId, sizeBytes: tBytes, rowCount: tRows, type: 'TABLE' as const });
+            }
+            children.sort((a, b) => b.sizeBytes - a.sizeBytes);
+            totalBytes += dsBytes;
+            items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: dsBytes, rowCount: dsRows, type: 'DATASET' as const, children });
+          } catch {
+            // Skip datasets we can't query
+            items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: 0, rowCount: 0, type: 'DATASET' as const });
           }
-          children.sort((a, b) => b.sizeBytes - a.sizeBytes);
-          totalBytes += dsBytes;
-          items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: dsBytes, rowCount: dsRows, type: 'DATASET' as const, children });
         }
         items.sort((a, b) => b.sizeBytes - a.sizeBytes);
         const result: import('./types').StorageBreakdownResult = {
@@ -2009,29 +2018,37 @@ async function handleMonitoring(
       };
       return [compose('monitoring', result as unknown as MonitoringResult)];
     } catch (err) {
-      // TABLE_STORAGE query failed -- fall back to REST API
-      onStatus?.(`Query failed: ${err instanceof Error ? err.message : String(err)}. Trying REST API...`);
+      // TABLE_STORAGE query failed -- fall back to __TABLES__ per dataset
+      onStatus?.(`Query failed: ${err instanceof Error ? err.message : String(err)}. Trying per-dataset metadata...`);
       try {
-        const { listDatasets, listTables } = await import('./bigquery-client');
+        const { listDatasets } = await import('./bigquery-client');
         const datasets = await listDatasets(project);
         const items: import('./types').StorageItem[] = [];
         let totalBytes = 0;
         for (const ds of datasets.slice(0, 20)) {
           const dsId = ds.datasetId || ds.id || '';
-          const tables = await listTables(project, dsId);
-          let dsBytes = 0;
-          let dsRows = 0;
-          const children: import('./types').StorageItem[] = [];
-          for (const t of tables) {
-            const tBytes = Number(t.numBytes || 0);
-            const tRows = Number(t.numRows || 0);
-            dsBytes += tBytes;
-            dsRows += tRows;
-            children.push({ ref: `${project}.${dsId}.${t.tableId}`, label: t.tableId || '', sizeBytes: tBytes, rowCount: tRows, type: 'TABLE' as const });
+          try {
+            const tablesMeta = await executeQuery(
+              `SELECT table_id, row_count, size_bytes FROM \`${project}.${dsId}.__TABLES__\``,
+              project
+            );
+            let dsBytes = 0;
+            let dsRows = 0;
+            const children: import('./types').StorageItem[] = [];
+            for (const row of tablesMeta.rows) {
+              const tId = String(row[0] ?? '');
+              const tRows = Number(row[1] ?? 0);
+              const tBytes = Number(row[2] ?? 0);
+              dsBytes += tBytes;
+              dsRows += tRows;
+              children.push({ ref: `${project}.${dsId}.${tId}`, label: tId, sizeBytes: tBytes, rowCount: tRows, type: 'TABLE' as const });
+            }
+            children.sort((a, b) => b.sizeBytes - a.sizeBytes);
+            totalBytes += dsBytes;
+            items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: dsBytes, rowCount: dsRows, type: 'DATASET' as const, children });
+          } catch {
+            items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: 0, rowCount: 0, type: 'DATASET' as const });
           }
-          children.sort((a, b) => b.sizeBytes - a.sizeBytes);
-          totalBytes += dsBytes;
-          items.push({ ref: `${project}.${dsId}`, label: dsId, sizeBytes: dsBytes, rowCount: dsRows, type: 'DATASET' as const, children });
         }
         items.sort((a, b) => b.sizeBytes - a.sizeBytes);
         const result: import('./types').StorageBreakdownResult = {
