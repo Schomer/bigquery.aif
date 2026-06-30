@@ -346,6 +346,25 @@ async function resolveDefaultDataset(project: string, contextDataset?: string): 
   return resolveDefaultDatasetFromList(available, contextDataset, project);
 }
 
+/**
+ * Scan the user's message for a known dataset name from the available list.
+ * Matches case-insensitively using word boundaries to avoid substring false
+ * positives. Returns the first matched dataset name (in its canonical casing)
+ * or undefined if none found.
+ */
+function extractDatasetFromMessage(message: string, available: string[]): string | undefined {
+  if (!available.length) return undefined;
+  // Sort by length descending so longer names match first (e.g., "formula_1_data"
+  // is preferred over "formula_1" if both exist).
+  const sorted = [...available].sort((a, b) => b.length - a.length);
+  for (const ds of sorted) {
+    const escaped = ds.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (re.test(message)) return ds;
+  }
+  return undefined;
+}
+
 // ─── Intent classification ────────────────────────────────────────────────────
 // A single Gemini call classifies the target skill AND detects multistep requests.
 // Falls back to keyword-based classifyIntent if the LLM call fails.
@@ -1162,7 +1181,12 @@ async function handleQuery(
     loadSkillDoc('query'),
     context?.availableDatasets ?? getAvailableDatasets(project),
   ]);
-  const dataset = context?.resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+  let dataset = context?.resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+  // If no dataset was pre-selected, try to extract one from the user's message
+  // to avoid the LLM misinterpreting natural language (e.g., "the formula_1 dataset").
+  if (!dataset) {
+    dataset = extractDatasetFromMessage(message, available) ?? '';
+  }
 
   const messages = history.slice(-6).map((m) => ({
     role: m.role as 'user' | 'assistant',
@@ -1333,7 +1357,10 @@ async function handleDataManagement(
     loadSkillDoc('data-management'),
     context?.availableDatasets ?? getAvailableDatasets(project),
   ]);
-  const dataset = context?.resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+  let dataset = context?.resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+  if (!dataset) {
+    dataset = extractDatasetFromMessage(message, available) ?? '';
+  }
 
   const messages = history.slice(-6).map((m) => ({
     role: m.role as 'user' | 'assistant',
@@ -1734,7 +1761,10 @@ async function handleDataQuality(
 
   // Parallelize dataset resolution
   const available = context?.availableDatasets ?? await getAvailableDatasets(project);
-  const dataset = context?.resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+  let dataset = context?.resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
+  if (!dataset) {
+    dataset = extractDatasetFromMessage(message, available) ?? '';
+  }
 
   onStatus?.(`Classifying quality check type for: "${message.slice(0, 60)}${message.length > 60 ? '...' : ''}"`);
   const intent = await callGemini({
