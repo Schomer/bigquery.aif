@@ -475,6 +475,9 @@ export default function Home() {
         forcedSkill: chip.targetSkill as SkillName,
         ...(chipContext.dataset ? { dataset: String(chipContext.dataset) } : {}),
         ...(chipContext.table ? { lastTable: String(chipContext.table) } : {}),
+        // Pass full handoff context so handlers can use structured fields
+        // (operationHint, checkType, monitoringHint, filter, etc.)
+        handoffContext: chipContext,
       };
 
       // Build a more explicit message from chip context

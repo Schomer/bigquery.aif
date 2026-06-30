@@ -385,6 +385,8 @@ export interface ProcessMessageArgs {
     forcedSkill?: SkillName;
     resolvedDataset?: string;
     availableDatasets?: string[];
+    // Handoff chain: full envelope context from chip clicks (§B)
+    handoffContext?: Record<string, unknown>;
   };
   onStatus?: (status: string) => void;
 }
@@ -1364,10 +1366,23 @@ Return the corrected SQL and a short explanation of what you changed.`,
 async function handleDataManagement(
   message: string,
   history: ChatMessage[],
-  context?: { project?: string; dataset?: string; resolvedDataset?: string; availableDatasets?: string[] },
+  context?: { project?: string; dataset?: string; resolvedDataset?: string; availableDatasets?: string[]; handoffContext?: Record<string, unknown> },
   onStatus?: (status: string) => void
 ): Promise<CompositionEnvelope[]> {
   const project = context?.project || '';
+  const hc = context?.handoffContext;
+
+  // Enrich message with handoff context so the LLM has full context
+  let enrichedMessage = message;
+  if (hc?.operationHint && typeof hc.operationHint === 'string') {
+    enrichedMessage = `${message}. Operation type: ${hc.operationHint}.`;
+    if (hc.table && typeof hc.table === 'string') {
+      enrichedMessage += ` Target table: ${hc.table}.`;
+    }
+    if (hc.filter && typeof hc.filter === 'string') {
+      enrichedMessage += ` Filter: ${hc.filter}.`;
+    }
+  }
 
   // Parallelize: skill doc and dataset resolution
   const [skillDoc, available] = await Promise.all([
@@ -1376,7 +1391,7 @@ async function handleDataManagement(
   ]);
   let dataset = context?.resolvedDataset ?? resolveDefaultDatasetFromList(available, context?.dataset, project);
   if (!dataset) {
-    dataset = extractDatasetFromMessage(message, available) ?? '';
+    dataset = extractDatasetFromMessage(enrichedMessage, available) ?? '';
   }
 
   const messages = history.slice(-6).map((m) => ({
@@ -1398,7 +1413,7 @@ ${dmDatasetLine}
 The available datasets in project ${project} are: ${available.join(', ')}
 ${schemaContext}
 Always wrap fully qualified table references in literal backticks: \`${project}.DATASET.tablename\` (e.g. \`${project}.ecomm.orders\`). This is CRITICAL to prevent syntax errors when project names contain dashes/hyphens.\``,
-    messages: [...messages, { role: 'user' as const, content: message }],
+    messages: [...messages, { role: 'user' as const, content: enrichedMessage }],
     schema: DataManagementResponseSchema,
     project,
   });
@@ -1566,21 +1581,33 @@ async function executeConfirmedOperation(
 
 async function handleMonitoring(
   message: string,
-  context?: { project?: string },
+  context?: { project?: string; handoffContext?: Record<string, unknown> },
   onStatus?: (status: string) => void
 ): Promise<CompositionEnvelope[]> {
   const project = context?.project || '';
+  const hc = context?.handoffContext;
 
-  // Classify monitoring sub-type via Gemini
-  onStatus?.(`Classifying monitoring request...`);
-  const intent = await callGemini({
-    systemInstruction: `You classify BigQuery monitoring requests. Available types: JOBS (job history, recent queries, errors, failed jobs), STORAGE (table sizes, storage usage, row counts), SLOTS (slot utilization, resource usage over time), QUERY_PLAN (query execution plan, dry run, explain), ALERT (set up alerts, watch a metric, threshold notifications). Extract a jobId if the user mentions a specific job. Extract a table name if relevant.`,
-    prompt: message,
-    schema: MonitoringIntentSchema,
-    project,
-  });
-
-  const monitoringType = intent.monitoringType || 'JOBS';
+  // If handoff context carries a pre-classified monitoring type, skip LLM
+  let monitoringType: string;
+  if (hc?.monitoringHint && typeof hc.monitoringHint === 'string') {
+    const hintMap: Record<string, string> = {
+      'JOB_LIST': 'JOBS', 'COST_ANALYSIS': 'JOBS', 'DIAGNOSE_FAILURES': 'JOBS',
+      'STORAGE_ANALYSIS': 'STORAGE', 'STORAGE': 'STORAGE',
+      'SLOTS': 'SLOTS', 'QUERY_PLAN': 'QUERY_PLAN', 'ALERT': 'ALERT',
+    };
+    monitoringType = hintMap[hc.monitoringHint as string] || 'JOBS';
+    onStatus?.(`Running ${monitoringType} analysis (from handoff)...`);
+  } else {
+    // Classify monitoring sub-type via Gemini
+    onStatus?.(`Classifying monitoring request...`);
+    const intent = await callGemini({
+      systemInstruction: `You classify BigQuery monitoring requests. Available types: JOBS (job history, recent queries, errors, failed jobs), STORAGE (table sizes, storage usage, row counts), SLOTS (slot utilization, resource usage over time), QUERY_PLAN (query execution plan, dry run, explain), ALERT (set up alerts, watch a metric, threshold notifications). Extract a jobId if the user mentions a specific job. Extract a table name if relevant.`,
+      prompt: message,
+      schema: MonitoringIntentSchema,
+      project,
+    });
+    monitoringType = intent.monitoringType || 'JOBS';
+  }
 
   // STORAGE — query INFORMATION_SCHEMA.TABLE_STORAGE
   if (monitoringType === 'STORAGE') {
@@ -1771,10 +1798,11 @@ async function handleMonitoring(
 
 async function handleDataQuality(
   message: string,
-  context?: { project?: string; dataset?: string; lastTable?: string; resolvedDataset?: string; availableDatasets?: string[] },
+  context?: { project?: string; dataset?: string; lastTable?: string; resolvedDataset?: string; availableDatasets?: string[]; handoffContext?: Record<string, unknown> },
   onStatus?: (status: string) => void
 ): Promise<CompositionEnvelope[]> {
   const project = context?.project || '';
+  const hc = context?.handoffContext;
 
   // Parallelize dataset resolution
   const available = context?.availableDatasets ?? await getAvailableDatasets(project);
@@ -1783,13 +1811,24 @@ async function handleDataQuality(
     dataset = extractDatasetFromMessage(message, available) ?? '';
   }
 
-  onStatus?.(`Classifying quality check type for: "${message.slice(0, 60)}${message.length > 60 ? '...' : ''}"`);
-  const intent = await callGemini({
-    systemInstruction: `You classify BigQuery data quality requests. Extract check type and table name. Available check types: PROFILE (general stats), NULLS (null analysis), DUPLICATES (find duplicate rows), FRESHNESS (when was the table last updated), COMPLETENESS (overall completeness percentage across all columns), RANGE_VALIDATION (check numeric columns for out-of-range values), REFERENTIAL_INTEGRITY (check foreign key relationships for orphaned rows), SCHEMA_DRIFT (compare current schema against expected structure). The active project is ${project}, default dataset is ${dataset}, available datasets are: ${available.join(', ')}.`,
-    prompt: message,
-    schema: DqIntentSchema,
-    project,
-  });
+  // If handoff context carries a pre-classified check type, skip LLM classification
+  let intent: { checkType: string; table?: string; dataset?: string };
+  if (hc?.checkType && typeof hc.checkType === 'string') {
+    intent = {
+      checkType: hc.checkType as string,
+      table: (hc.table as string) ?? undefined,
+      dataset: (hc.dataset as string) ?? undefined,
+    };
+    onStatus?.(`Running ${intent.checkType} check (from handoff)...`);
+  } else {
+    onStatus?.(`Classifying quality check type for: "${message.slice(0, 60)}${message.length > 60 ? '...' : ''}"`);
+    intent = await callGemini({
+      systemInstruction: `You classify BigQuery data quality requests. Extract check type and table name. Available check types: PROFILE (general stats), NULLS (null analysis), DUPLICATES (find duplicate rows), FRESHNESS (when was the table last updated), COMPLETENESS (overall completeness percentage across all columns), RANGE_VALIDATION (check numeric columns for out-of-range values), REFERENTIAL_INTEGRITY (check foreign key relationships for orphaned rows), SCHEMA_DRIFT (compare current schema against expected structure). The active project is ${project}, default dataset is ${dataset}, available datasets are: ${available.join(', ')}.`,
+      prompt: message,
+      schema: DqIntentSchema,
+      project,
+    });
+  }
   const tableName = intent.table ?? context?.lastTable ?? null;
   let ds = intent.dataset ?? dataset;
   if (ds && ds.toLowerCase() === project.toLowerCase()) {
@@ -2151,6 +2190,47 @@ async function handleDataQuality(
   sql = `SELECT COUNT(*) AS __total_rows, ${exprs.join(', ')} FROM ${fqTable}`;
   onStatus?.(`Profiling ${columns.length} columns in ${fqTable}...`);
 
+  // Cost gate: dry-run before profile/null scan to catch expensive tables
+  try {
+    const costResult = await dryRun(sql, project);
+    if (costResult.requiresConfirmation) {
+      const result: DataQualityResult = {
+        skill: 'data-quality',
+        checkType: intent.checkType as DataQualityResult['checkType'],
+        table: fqTable,
+        sql,
+        findings: [],
+        summary: { rowsScanned: 0, issuesFound: 0, checkedAt },
+      };
+      // Return cost confirmation envelope
+      const envelope = compose('data-quality', result);
+      envelope.requiresConfirmation = true;
+      envelope.primaryArtifact = {
+        type: 'COST_CONFIRM_CARD',
+        data: {
+          skill: 'query',
+          sql,
+          requiresConfirmation: true,
+          costConfirm: {
+            totalBytesProcessed: costResult.totalBytesProcessed,
+            tier: costResult.tier,
+            requiresConfirmation: true,
+          },
+          columns: [],
+          rows: [],
+          rowCount: 0,
+          totalBytesProcessed: costResult.totalBytesProcessed,
+          costTier: costResult.tier,
+          suggestedVisualization: 'TABLE',
+          notableFindings: null,
+        } as QueryResult,
+      };
+      return [envelope];
+    }
+  } catch {
+    // dry-run failed, proceed with execution (non-blocking)
+  }
+
   let executed: Awaited<ReturnType<typeof executeQuery>>;
   try {
     executed = await executeQuery(sql, project);
@@ -2199,22 +2279,36 @@ async function handleDataQuality(
 
 async function handleDataLoading(
   message: string,
-  context?: { project?: string; dataset?: string; lastTable?: string; uid?: string },
+  context?: { project?: string; dataset?: string; lastTable?: string; uid?: string; handoffContext?: Record<string, unknown> },
   onStatus?: (status: string) => void
 ): Promise<CompositionEnvelope[]> {
   const project = context?.project || '';
+  const hc = context?.handoffContext;
   let dataset = context?.dataset || '';
   if (dataset && project && dataset.toLowerCase() === project.toLowerCase()) {
     dataset = '';
   }
 
-  onStatus?.(`Analyzing export request (project: ${project}, dataset: ${dataset || 'none'})...`);
-  const intent = await callGemini({
-    systemInstruction: `Classify a BigQuery data loading request. EXPORT_CSV = download as CSV. EXPORT_SHEETS = send to Google Sheets. SCHEDULE = schedule a recurring query. SAVED_QUERY = save a query for later reuse. SHARE = share or copy query results. Extract the table name or SQL to use. For SCHEDULE, also extract a schedule frequency into 'schedule' (e.g. 'every 24 hours', 'every monday 09:00') and a display name into 'displayName'. Project: ${project}, dataset: ${dataset}`,
-    prompt: message,
-    schema: DataLoadingIntentSchema,
-    project,
-  });
+  // If handoff context carries a pre-classified operation type, skip LLM
+  let intent: { operationType: string; tableName?: string; sql?: string; displayName?: string; schedule?: string };
+  if (hc?.operationType && typeof hc.operationType === 'string') {
+    intent = {
+      operationType: hc.operationType as string,
+      tableName: (hc.table as string) ?? (hc.tableName as string) ?? undefined,
+      sql: (hc.sql as string) ?? undefined,
+      displayName: (hc.displayName as string) ?? undefined,
+      schedule: (hc.schedule as string) ?? undefined,
+    };
+    onStatus?.(`Running ${intent.operationType} (from handoff)...`);
+  } else {
+    onStatus?.(`Analyzing export request (project: ${project}, dataset: ${dataset || 'none'})...`);
+    intent = await callGemini({
+      systemInstruction: `Classify a BigQuery data loading request. EXPORT_CSV = download as CSV. EXPORT_SHEETS = send to Google Sheets. SCHEDULE = schedule a recurring query. SAVED_QUERY = save a query for later reuse. SHARE = share or copy query results. Extract the table name or SQL to use. For SCHEDULE, also extract a schedule frequency into 'schedule' (e.g. 'every 24 hours', 'every monday 09:00') and a display name into 'displayName'. Project: ${project}, dataset: ${dataset}`,
+      prompt: message,
+      schema: DataLoadingIntentSchema,
+      project,
+    });
+  }
 
   // SCHEDULE — create via Data Transfer API, fall back to guidance
   if (intent.operationType === 'SCHEDULE') {
@@ -2410,18 +2504,31 @@ async function handleDataLoading(
 
 async function handleDiscovery(
   message: string,
-  context?: { project?: string; dataset?: string },
+  context?: { project?: string; dataset?: string; handoffContext?: Record<string, unknown> },
   onStatus?: (status: string) => void
 ): Promise<CompositionEnvelope[]> {
   const project = context?.project || '';
+  const hc = context?.handoffContext;
   const available = await getAvailableDatasets(project);
 
-  const intent = await callGemini({
-    systemInstruction: `You are a BigQuery discovery assistant. Classify the user's request as either SEARCH (find tables/views matching a term), COMPARISON (compare two specific tables' schemas), or LINEAGE (trace where data comes from or what depends on a table). Extract the search term or table name into 'query'. For COMPARISON, extract the second table into 'secondTable'. For LINEAGE, extract the table name into 'tableName'. The active project is ${project}, available datasets are: ${available.join(', ')}.`,
-    prompt: message,
-    schema: DiscoveryResponseSchema,
-    project,
-  });
+  // If handoff context carries a pre-classified discovery type, skip LLM
+  let intent: { discoveryType: string; query: string; tableName?: string; secondTable?: string };
+  if (hc?.discoveryType && typeof hc.discoveryType === 'string') {
+    intent = {
+      discoveryType: hc.discoveryType as string,
+      query: (hc.query as string) ?? (hc.table as string) ?? '',
+      tableName: (hc.tableName as string) ?? (hc.table as string) ?? undefined,
+      secondTable: (hc.secondTable as string) ?? undefined,
+    };
+    onStatus?.(`Running ${intent.discoveryType} (from handoff)...`);
+  } else {
+    intent = await callGemini({
+      systemInstruction: `You are a BigQuery discovery assistant. Classify the user's request as either SEARCH (find tables/views matching a term), COMPARISON (compare two specific tables' schemas), or LINEAGE (trace where data comes from or what depends on a table). Extract the search term or table name into 'query'. For COMPARISON, extract the second table into 'secondTable'. For LINEAGE, extract the table name into 'tableName'. The active project is ${project}, available datasets are: ${available.join(', ')}.`,
+      prompt: message,
+      schema: DiscoveryResponseSchema,
+      project,
+    });
+  }
 
   // LINEAGE: trace upstream and downstream dependencies via INFORMATION_SCHEMA.JOBS
   if (intent.discoveryType === 'LINEAGE') {

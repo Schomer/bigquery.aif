@@ -547,7 +547,7 @@ function buildQueryHeadline(rowCount: number, sql: string): string {
 function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
   const id = randomUUID();
   const { summary } = result;
-  const tone: Tone = summary.issuesFound > 0 ? 'ATTENTION' : 'NEUTRAL';
+  const tone: Tone = summary.issuesFound > 0 ? 'ATTENTION' : 'POSITIVE';
   let headlineText: string;
   if (summary.issuesFound === 0) {
     headlineText = `\`${result.table.split('.').pop()}\` looks clean -- no issues found`;
@@ -576,13 +576,35 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
   }
 
   const nextActions: HandoffEnvelope[] = [];
-  const hasDupes = result.findings.some((f) => f.metric === 'duplicate_groups' && Number(f.value) > 0);
-  const hasNulls = result.findings.some((f) => f.metric === 'null_rate' && Number(f.value) > 0.1);
-  if (hasDupes) {
-    nextActions.push({ targetSkill: 'data-management', label: 'Remove duplicates', context: { table: result.table, operationHint: 'DEDUPE' }, sourceSkill: 'data-quality', sourceResultRef: id });
+  const dupeFinding = result.findings.find((f) => f.metric === 'duplicate_groups' && Number(f.value) > 0);
+  const highNullFindings = result.findings.filter((f) => f.metric === 'null_rate' && Number(f.value) > 0.1);
+  if (dupeFinding) {
+    nextActions.push({
+      targetSkill: 'data-management',
+      label: 'Remove duplicates',
+      context: {
+        table: result.table,
+        operationHint: 'DEDUPE',
+        keyColumn: dupeFinding.column,
+        duplicateCount: dupeFinding.value,
+      },
+      sourceSkill: 'data-quality',
+      sourceResultRef: id,
+    });
   }
-  if (hasNulls) {
-    nextActions.push({ targetSkill: 'data-management', label: 'Fix nulls', context: { table: result.table, operationHint: 'UPDATE' }, sourceSkill: 'data-quality', sourceResultRef: id });
+  if (highNullFindings.length > 0) {
+    const nullCols = highNullFindings.map(f => f.column).join(', ');
+    nextActions.push({
+      targetSkill: 'data-management',
+      label: 'Fix nulls',
+      context: {
+        table: result.table,
+        operationHint: 'UPDATE',
+        nullColumns: nullCols,
+      },
+      sourceSkill: 'data-quality',
+      sourceResultRef: id,
+    });
   }
   // Always offer to query the table
   nextActions.push({
