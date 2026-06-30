@@ -768,11 +768,23 @@ function extractSchemaIdentifiers(
   // DATASET scope: listing tables -- try to extract dataset name
   if (TABLE_LIST_SIGNALS.some((s) => lower.includes(s))) {
     // "tables in ecomm", "list tables in my_dataset", "tables in the formula_1 dataset"
-    const dsMatch = message.match(/\btables?\s+(?:in|of|from)\s+(?:the\s+|a\s+|an\s+)?[`]?(\w[\w-]*)[`]?/i);
-    const extracted = dsMatch?.[1];
+    // Allow optional filler words (e.g., "are", "available", "exist") between "tables" and the preposition
+    const dsMatch = message.match(/\btables?\s+(?:\w+\s+)*?(?:in|of|from)\s+(?:the\s+|a\s+|an\s+)?[`]?(\w[\w-]*)[`]?/i);
+    let extracted = dsMatch?.[1];
+    // Filter out noise words that the regex might capture instead of a dataset name
+    if (extracted && ['dataset', 'project', 'the', 'this', 'my'].includes(extracted.toLowerCase())) {
+      extracted = undefined;
+    }
     // Validate against known datasets; fall back to context dataset if not recognized
-    if (extracted && availableDatasets?.some((ds) => ds.toLowerCase() === extracted.toLowerCase())) {
+    if (extracted && availableDatasets?.some((ds) => ds.toLowerCase() === extracted!.toLowerCase())) {
       return { scope: 'DATASET', dataset: extracted };
+    }
+    // If regex didn't capture a dataset name, try scanning for known dataset names in the message
+    if (!extracted && availableDatasets) {
+      const scanned = extractDatasetFromMessage(message, availableDatasets);
+      if (scanned) {
+        return { scope: 'DATASET', dataset: scanned };
+      }
     }
     return { scope: 'DATASET', dataset: extracted ?? contextDataset };
   }
