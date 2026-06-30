@@ -575,6 +575,8 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
     }
   }
 
+  // Strip surrounding backticks from table reference for clean chip labels/SQL
+  const cleanTable = result.table.replace(/`/g, '');
   const nextActions: HandoffEnvelope[] = [];
   const dupeFinding = result.findings.find((f) => f.metric === 'duplicate_groups' && Number(f.value) > 0);
   const highNullFindings = result.findings.filter((f) => f.metric === 'null_rate' && Number(f.value) > 0.1);
@@ -583,7 +585,7 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
       targetSkill: 'data-management',
       label: 'Remove duplicates',
       context: {
-        table: result.table,
+        table: cleanTable,
         operationHint: 'DEDUPE',
         keyColumn: dupeFinding.column,
         duplicateCount: dupeFinding.value,
@@ -598,7 +600,7 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
       targetSkill: 'data-management',
       label: 'Fix nulls',
       context: {
-        table: result.table,
+        table: cleanTable,
         operationHint: 'UPDATE',
         nullColumns: nullCols,
       },
@@ -606,11 +608,12 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
       sourceResultRef: id,
     });
   }
+  const shortTable = cleanTable.split('.').pop() || cleanTable;
   // Always offer to query the table
   nextActions.push({
     targetSkill: 'query',
-    label: `Sample ${result.table.split('.').pop()}`,
-    context: { table: result.table, sql: `SELECT * FROM \`${result.table}\` LIMIT 20` },
+    label: `Sample ${shortTable}`,
+    context: { table: cleanTable, sql: `SELECT * FROM \`${cleanTable}\` LIMIT 20` },
     sourceSkill: 'data-quality',
     sourceResultRef: id,
   });
@@ -618,7 +621,7 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
   nextActions.push({
     targetSkill: 'schema',
     label: 'View schema',
-    context: { table: result.table },
+    context: { table: cleanTable },
     sourceSkill: 'data-quality',
     sourceResultRef: id,
   });
@@ -638,7 +641,9 @@ function composeDataQuality(result: DataQualityResult): CompositionEnvelope {
 function composeDataLoading(result: DataLoadingResult): CompositionEnvelope {
   const id = randomUUID();
   let headlineText = result.message;
-  const tone: Tone = 'NEUTRAL';
+  // Successful operations get POSITIVE, informational responses get NEUTRAL
+  const isSuccess = ['EXPORT_CSV', 'EXPORT_SHEETS', 'SCHEDULE_CREATED', 'QUERY_SAVED', 'SHARE_CLIPBOARD'].includes(result.operationType);
+  const tone: Tone = isSuccess ? 'POSITIVE' : 'NEUTRAL';
 
   if (result.operationType === 'EXPORT_CSV' && result.rowCount !== undefined) {
     headlineText = `${result.rowCount.toLocaleString()} rows${result.columnCount ? ` across ${result.columnCount} columns` : ''} ready to download`;
