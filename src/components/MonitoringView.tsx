@@ -159,7 +159,10 @@ function formatBytes(bytes: number): string {
 
 function relativeTime(iso: string): string {
   try {
-    const diffMs = Date.now() - new Date(iso).getTime();
+    const ts = new Date(iso).getTime();
+    if (isNaN(ts)) return iso || '---';
+    const diffMs = Date.now() - ts;
+    if (diffMs < 0) return 'just now';
     const secs = Math.floor(diffMs / 1000);
     if (secs < 60) return `${secs}s ago`;
     const mins = Math.floor(secs / 60);
@@ -168,6 +171,6 @@ function relativeTime(iso: string): string {
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
   } catch {
-    return iso;
+    return iso || '---';
   }
 }

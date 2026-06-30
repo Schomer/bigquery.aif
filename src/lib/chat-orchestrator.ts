@@ -1716,6 +1716,32 @@ async function handleMonitoring(
     return [compose('monitoring', result)];
   }
 
+  // Helper: BigQuery timestamps may be epoch-ms numbers, {value:'...'} objects, or ISO strings
+  function normalizeTimestamp(val: unknown): string {
+    if (val == null) return '';
+    // If it's an object with a .value property (BigQuery client format)
+    if (typeof val === 'object' && val !== null && 'value' in val) {
+      return normalizeTimestamp((val as { value: unknown }).value);
+    }
+    // If it's a number, treat as epoch milliseconds
+    if (typeof val === 'number') {
+      // BigQuery sometimes uses microseconds -- if > year 5000 in ms, assume micros
+      const ms = val > 1e16 ? val / 1000 : val;
+      return new Date(ms).toISOString();
+    }
+    const s = String(val);
+    // If it's a purely numeric string, parse as epoch
+    if (/^\d{10,}$/.test(s)) {
+      const num = Number(s);
+      const ms = num > 1e16 ? num / 1000 : num;
+      return new Date(ms).toISOString();
+    }
+    // Try parsing as-is -- if valid, return ISO
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString();
+    return s;
+  }
+
   // JOBS (default) — existing INFORMATION_SCHEMA.JOBS query
   const sql = `SELECT job_id, user_email, statement_type, state, creation_time, total_bytes_processed, error_result, referenced_tables FROM \`region-us\`.INFORMATION_SCHEMA.JOBS_BY_PROJECT WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR) ORDER BY creation_time DESC LIMIT 50`;
 
@@ -1769,7 +1795,7 @@ async function handleMonitoring(
       userEmail: String(row[iEmail] ?? ''),
       statementType: String(row[iType] ?? ''),
       status,
-      createTime: String(row[iCreateTime] ?? ''),
+      createTime: normalizeTimestamp(row[iCreateTime]),
       totalBytesProcessed: Number(row[iBytes] ?? 0),
       errorMessage,
       referencedTables,
