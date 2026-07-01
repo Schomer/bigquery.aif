@@ -4,6 +4,26 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Context chips in the prompt area
+
+**What changed**:
+- Added visual context indicator above the textarea in the prompt area
+- Context chips auto-populate from the last response (dataset, table, result row count)
+- Chips are dismissable -- removing a chip excludes that piece from the next orchestrator call
+- Any previous ArtifactCard result can be pinned as context via a "chat" icon button in the card footer
+- Pinning replaces the current context chips with the pinned result's context
+- All orchestrator calls now derive context from the visible chips (source of truth)
+- Context resets on new conversation
+- Works in all three prompt bar locations: empty state, floating bar, split-mode sidebar
+
+**Files modified**:
+- `src/lib/types.ts` -- added `ContextItem` interface
+- `src/app/page.tsx` -- `contextItems` state, `extractContextItems()`, `deriveContextFromItems()`, `pinEnvelopeContext()`, chips row rendering, ArtifactCard wiring
+- `src/components/ArtifactCard.tsx` -- added `onPin`/`isPinned` props, chat icon button in footer
+- `src/app/globals.css` -- `.context-chips-row`, `.context-chip`, `.context-chip-dismiss`, `.context-action-btn` styles
+
+---
+
 ## 2026-07-01: Plan caching, conditional self-review, and result quality flags
 
 **What changed**:

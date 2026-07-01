@@ -173,7 +173,7 @@ UI Components (src/components/)
 | MultistepView.tsx | 15KB | Multi-step workflow cards |
 | ErDiagramView.tsx | 14KB | Entity-relationship diagrams |
 | LineageDagView.tsx | 14KB | Data lineage DAG visualization |
-| ArtifactCard.tsx | 15KB | Generic artifact rendering wrapper |
+| ArtifactCard.tsx | 17KB | Generic artifact rendering wrapper, includes pin-to-context button |
 | CostAnalysisView.tsx | 15KB | Cost breakdown visualizations |
 | AccessPatternView.tsx | 15KB | Table access pattern analysis |
 | StorageBreakdownView.tsx | 15KB | Storage treemaps |
