@@ -1385,8 +1385,135 @@ details>summary::marker {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
   box-shadow: 0 4px 32px rgba(26, 115, 232, .22), 0 0 0 8px rgba(26, 115, 232, .06);
+  position: relative;
+  z-index: 2;
+}
+
+/* ── Orbit system ── */
+.so-orbit-container {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  margin-bottom: 24px;
+}
+
+/* Shared orbit ring — a spinning circle centered on the ball */
+.so-orbit {
+  position: absolute;
+  border-radius: 50%;
+  /* ring is visually traced by its children, not by a border */
+  border: 1px solid transparent;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  pointer-events: none;
+}
+
+/* Ring 1: 240px diameter, 18s clockwise */
+.so-orbit-1 {
+  width: 240px;
+  height: 240px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: so-spin 18s linear infinite;
+}
+
+/* Ring 2: 360px diameter, 28s counter-clockwise */
+.so-orbit-2 {
+  width: 360px;
+  height: 360px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: so-spin 28s linear infinite reverse;
+}
+
+/* Ring 3: 520px diameter, 40s clockwise */
+.so-orbit-3 {
+  width: 520px;
+  height: 520px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: so-spin 40s linear infinite;
+}
+
+@keyframes so-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ── Stars (4-point sparkle shape via clip-path) ── */
+.so-star {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #a8c7fa;
+  clip-path: polygon(
+    50% 0%, 62% 38%, 100% 50%, 62% 62%,
+    50% 100%, 38% 62%, 0% 50%, 38% 38%
+  );
+  animation: so-twinkle 2.5s ease-in-out infinite;
+}
+
+/* Position each star around the ring perimeter */
+.so-star-a { top: 0;   left: 50%; transform: translateX(-50%); animation-delay: 0s; }
+.so-star-b { bottom: 0; left: 50%; transform: translateX(-50%); animation-delay: 0.8s; }
+.so-star-c { top: 50%; right: 0;  transform: translateY(-50%); animation-delay: 1.6s; width: 7px; height: 7px; }
+
+.so-star-d { top: 15%; right: 10%; animation-delay: 0.4s; width: 12px; height: 12px; background: #c5d8fb; }
+.so-star-e { top: 0;   left: 30%; transform: translateX(-50%); animation-delay: 0.2s; width: 14px; height: 14px; background: #93b4f5; }
+.so-star-f { bottom: 10%; right: 20%; animation-delay: 1.2s; width: 8px; height: 8px; }
+
+@keyframes so-twinkle {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.2); }
+}
+
+/* override twinkle transform for positioned stars that have their own transforms */
+.so-star-a { animation: so-twinkle-a 2.5s ease-in-out infinite; }
+@keyframes so-twinkle-a {
+  0%, 100% { opacity: 0.4; transform: translateX(-50%) scale(0.8); }
+  50%      { opacity: 1;   transform: translateX(-50%) scale(1.2); }
+}
+.so-star-b { animation: so-twinkle-b 2.5s ease-in-out infinite 0.8s; }
+@keyframes so-twinkle-b {
+  0%, 100% { opacity: 0.4; transform: translateX(-50%) scale(0.8); }
+  50%      { opacity: 1;   transform: translateX(-50%) scale(1.2); }
+}
+.so-star-c { animation: so-twinkle-c 2.5s ease-in-out infinite 1.6s; }
+@keyframes so-twinkle-c {
+  0%, 100% { opacity: 0.4; transform: translateY(-50%) scale(0.8); }
+  50%      { opacity: 1;   transform: translateY(-50%) scale(1.2); }
+}
+.so-star-e { animation: so-twinkle-e 2.5s ease-in-out infinite 0.2s; }
+@keyframes so-twinkle-e {
+  0%, 100% { opacity: 0.4; transform: translateX(-50%) scale(0.8); }
+  50%      { opacity: 1;   transform: translateX(-50%) scale(1.2); }
+}
+
+/* ── Particles (small glowing dots) ── */
+.so-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #a8c7fa;
+  box-shadow: 0 0 6px 2px rgba(168, 199, 250, .6);
+  animation: so-pulse 3s ease-in-out infinite;
+}
+
+.so-particle-a { top: 50%; left: 0; animation-delay: 0s; }
+.so-particle-b { top: 20%; left: 80%; animation-delay: 1s; width: 3px; height: 3px; }
+.so-particle-c { bottom: 15%; left: 15%; animation-delay: 1.8s; width: 5px; height: 5px; background: #c5d8fb; box-shadow: 0 0 8px 3px rgba(197, 216, 251, .6); }
+.so-particle-d { top: 50%; right: 0; animation-delay: 0.5s; }
+.so-particle-e { bottom: 0; left: 40%; animation-delay: 1.4s; width: 3px; height: 3px; }
+.so-particle-f { top: 10%; left: 60%; animation-delay: 2.2s; width: 5px; height: 5px; background: #ddd6fe; box-shadow: 0 0 8px 3px rgba(221, 214, 254, .5); }
+
+@keyframes so-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
+  50%      { opacity: 1;   transform: scale(1.3); }
 }
 
 /* Headline */

@@ -25,9 +25,34 @@ export function SignedOutPage() {
         ) : (
           /* ── Signed-out state: logo + CTA ── */
           <>
-            {/* Logo mark */}
-            <div className="so-icon-ring">
-              <AnimatedCrystalBall width={96} height={96} aria-hidden="true" />
+            {/* Orbiting stars and particles */}
+            <div className="so-orbit-container" aria-hidden="true">
+              {/* Orbit ring 1 — close, fast */}
+              <div className="so-orbit so-orbit-1">
+                <div className="so-star so-star-a" />
+                <div className="so-star so-star-b" />
+                <div className="so-star so-star-c" />
+              </div>
+              {/* Orbit ring 2 — medium distance */}
+              <div className="so-orbit so-orbit-2">
+                <div className="so-particle so-particle-a" />
+                <div className="so-particle so-particle-b" />
+                <div className="so-star so-star-d" />
+                <div className="so-particle so-particle-c" />
+              </div>
+              {/* Orbit ring 3 — wide, slow */}
+              <div className="so-orbit so-orbit-3">
+                <div className="so-star so-star-e" />
+                <div className="so-particle so-particle-d" />
+                <div className="so-star so-star-f" />
+                <div className="so-particle so-particle-e" />
+                <div className="so-particle so-particle-f" />
+              </div>
+
+              {/* Logo mark */}
+              <div className="so-icon-ring">
+                <AnimatedCrystalBall width={96} height={96} aria-hidden="true" />
+              </div>
             </div>
 
             <h1 className="so-headline">BigQuery AIF</h1>
