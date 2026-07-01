@@ -123,7 +123,6 @@ async function main() {
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
-    channel: 'chrome',
     ignoreDefaultArgs: ['--enable-automation'],
     args: [
       '--start-maximized',
@@ -133,8 +132,10 @@ async function main() {
     deviceScaleFactor: 2,
   });
 
-  const page = await context.newPage();
+  // Persistent context may have an existing blank page; reuse or create
+  const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
   await page.waitForTimeout(1000);
+  console.log('Navigating to', APP_URL, '...');
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(3000);
 

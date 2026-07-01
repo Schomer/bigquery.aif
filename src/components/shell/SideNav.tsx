@@ -197,7 +197,6 @@ export function SideNav({ collapsed }: SideNavProps) {
                             onClick={(e) => { e.preventDefault(); loadConversation(conv.id); setActivePage('chat'); }}
                             style={collapsed ? undefined : { paddingRight: 56 }}
                           >
-                            <span className="material-symbols-outlined" style={{ fontSize: 16, opacity: 0.6 }}>chat_bubble</span>
                             <span className="gc-nav-label" style={{ fontSize: 12 }}>{conv.title}</span>
                           </a>
                         )}
