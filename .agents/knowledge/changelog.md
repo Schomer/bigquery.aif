@@ -4,6 +4,21 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Freshness monitoring project-vs-dataset fix
+
+**What changed**:
+- Fixed `handleMonitoring` FRESHNESS handler to resolve dataset from enriched context, not just handoff context
+- Made `FreshnessResult.dataset` nullable (null = project scope), added `project` field
+- Updated composer and FreshnessView to correctly label project-scope vs dataset-scope results
+
+**Files modified**:
+- `src/lib/chat-orchestrator.ts` -- expanded monitoring handler context type, fixed dataset resolution chain
+- `src/lib/types.ts` -- `FreshnessResult.dataset` now `string | null`, added `project?: string`
+- `src/lib/composer.ts` -- `composeFreshness` handles empty entries and project-scope labeling
+- `src/components/FreshnessView.tsx` -- empty state and summary badges distinguish project vs dataset
+
+---
+
 ## 2026-06-30: Knowledge System Implementation
 
 **What changed**:
