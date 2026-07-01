@@ -4,6 +4,23 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Editable SQL block with re-run
+
+**What changed**:
+- SQL blocks now wrap multi-line (`pre-wrap`) instead of scrolling off-screen horizontally
+- Added `max-height: 240px` with vertical scrolling for long queries
+- SQL in query result cards can be edited inline: click "Edit" to switch to a textarea, modify the SQL, then click "Run" to re-execute the modified query
+- "Reset" link reverts edits to the original SQL
+- Re-run uses the existing chip-click orchestration path (`forcedSkill: 'query'` with SQL context)
+
+**Files modified**:
+- `src/app/globals.css` -- updated `.sql-block`, added `.sql-block-editor`, `.sql-action-btn`, `.sql-run-btn`
+- `src/components/ArtifactCard.tsx` -- replaced static SQL div with editable textarea + action bar
+- `src/app/page.tsx` -- added `handleRunSql()` and passed `onRunSql` prop to ArtifactCard
+- `src/components/AlertView.tsx` -- added pre-wrap and max-height to Check SQL block
+
+---
+
 ## 2026-07-01: Fix session expired sign-in loop
 
 **What changed**:
