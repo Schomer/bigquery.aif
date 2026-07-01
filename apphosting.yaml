@@ -19,3 +19,7 @@ env:
     value: malloy-data
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: malloy-data
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyBAmqEk0uffrau95ArrczJCmC7e3YBfONM
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: malloy-data.firebaseapp.com
