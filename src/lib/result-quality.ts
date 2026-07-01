@@ -9,7 +9,7 @@ import type { SkillName } from './types';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface QualityFlag {
-  type: 'NULL_RATE' | 'CATEGORICAL_NEAR_DUPES' | 'LOW_ROW_COUNT' | 'SINGLE_VALUE_COLUMN';
+  type: 'NULL_RATE' | 'CATEGORICAL_NEAR_DUPES' | 'LOW_ROW_COUNT';
   severity: 'info' | 'warning';
   message: string;
   column?: string;
@@ -28,20 +28,6 @@ const MIN_ROWS_FOR_ANALYSIS = 3;        // Don't analyze tiny result sets
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Extract column names that appear in WHERE clauses of the SQL. */
-function extractWhereColumns(sql: string): Set<string> {
-  const cols = new Set<string>();
-  // Match patterns like: WHERE col = ..., AND col = ..., OR col = ...
-  const whereMatch = sql.match(/\bWHERE\b([\s\S]*?)(?:\bGROUP\b|\bORDER\b|\bLIMIT\b|\bHAVING\b|$)/i);
-  if (!whereMatch) return cols;
-  const whereClause = whereMatch[1];
-  // Extract column names before comparison operators
-  const colMatches = whereClause.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|!=|<>|<|>|<=|>=|LIKE|IN\s*\(|IS\s+(?:NOT\s+)?NULL|BETWEEN)/gi);
-  for (const m of colMatches) {
-    cols.add(m[1].toLowerCase());
-  }
-  return cols;
-}
 
 /** Normalize a string value for near-duplicate detection. */
 function normalize(val: string): string {
@@ -185,44 +171,6 @@ function checkLowRowCount(
   return flags;
 }
 
-function checkSingleValueColumns(
-  columns: string[],
-  rows: unknown[][],
-  sql: string,
-): QualityFlag[] {
-  const flags: QualityFlag[] = [];
-  if (rows.length < MIN_ROWS_FOR_ANALYSIS) return flags;
-
-  // Columns that appear in WHERE clauses are expected to have a single value
-  // (the user filtered on them), so don't flag those.
-  const whereColumns = extractWhereColumns(sql);
-
-  for (let colIdx = 0; colIdx < columns.length; colIdx++) {
-    const colName = columns[colIdx];
-
-    // Skip columns that appear in a WHERE clause -- single value is expected
-    if (whereColumns.has(colName.toLowerCase())) continue;
-
-    const firstNonNull = rows.find((r) => r[colIdx] !== null && r[colIdx] !== undefined)?.[colIdx];
-    if (firstNonNull === undefined) continue; // all nulls, already caught by null check
-
-    const allSame = rows.every((r) => {
-      const val = r[colIdx];
-      if (val === null || val === undefined) return true; // ignore nulls
-      return String(val) === String(firstNonNull);
-    });
-
-    if (allSame) {
-      flags.push({
-        type: 'SINGLE_VALUE_COLUMN',
-        severity: 'info',
-        message: `Column "${colName}" has the same value ("${String(firstNonNull).slice(0, 40)}") in every row`,
-        column: colName,
-      });
-    }
-  }
-  return flags;
-}
 
 // ─── Main entry point ────────────────────────────────────────────────────────
 
@@ -245,7 +193,7 @@ export function analyzeResultQuality(
     ...checkNullRates(columns, rows, sql),
     ...checkCategoricalNearDupes(columns, rows, sql),
     ...checkLowRowCount(rows, sql),
-    ...checkSingleValueColumns(columns, rows, sql),
+
   ];
 
   // Cap at 5 flags to avoid overwhelming the UI
