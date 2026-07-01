@@ -80,9 +80,20 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
             fontWeight: 500,
             color: 'var(--text)',
             lineHeight: 1.5,
+            flex: 1,
           }}>
             {typeof envelope.headline.text === 'string' ? envelope.headline.text : String(envelope.headline.text ?? '')}
           </p>
+          {onPin && !envelope.requiresConfirmation && envelope.primaryArtifact.type !== 'COMPLETION_CARD' && envelope.primaryArtifact.type !== 'MULTISTEP_VIEW' && envelope.primaryArtifact.type !== 'COST_CONFIRM_CARD' && (
+            <button
+              className={`context-action-btn${isPinned ? ' is-active' : ''}`}
+              onClick={() => onPin(envelope)}
+              title={isPinned ? 'Using as context' : 'Use as context'}
+              style={{ flexShrink: 0, marginTop: 1 }}
+            >
+              <span className="material-symbols-outlined">chat</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -201,13 +212,12 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
           );
         })()}
 
-        {/* Footer meta: row count + cost + context action */}
+        {/* Footer meta: row count + cost */}
         {(() => {
           const d = envelope.primaryArtifact.data as Record<string, unknown> | undefined;
           const rowCount = Array.isArray((d as { rows?: unknown })?.rows) ? (d as { rows: unknown[] }).rows.length : null;
           const cost = envelope.provenance.cost;
-          const showPin = onPin && !envelope.requiresConfirmation && envelope.primaryArtifact.type !== 'COMPLETION_CARD' && envelope.primaryArtifact.type !== 'MULTISTEP_VIEW' && envelope.primaryArtifact.type !== 'COST_CONFIRM_CARD';
-          if (!rowCount && !cost && !envelope.provenance.jobId && !showPin) return null;
+          if (!rowCount && !cost && !envelope.provenance.jobId) return null;
           return (
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16, alignItems: 'center' }}>
               {rowCount != null && <span>{rowCount} rows</span>}
@@ -229,6 +239,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 3,
+                    marginLeft: 'auto',
                   }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
@@ -236,16 +247,6 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
                   <span className="material-symbols-outlined" style={{ fontSize: 13 }}>open_in_new</span>
                   BigQuery
                 </a>
-              )}
-              {showPin && (
-                <button
-                  className={`context-action-btn${isPinned ? ' is-active' : ''}`}
-                  onClick={() => onPin(envelope)}
-                  title={isPinned ? 'Using as context' : 'Use as context'}
-                  style={{ marginLeft: 'auto' }}
-                >
-                  <span className="material-symbols-outlined">chat</span>
-                </button>
               )}
             </div>
           );
