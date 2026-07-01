@@ -2191,7 +2191,7 @@ async function handleMonitoring(
     try {
       // __TABLES__ has last_modified_time; INFORMATION_SCHEMA.TABLES does not.
       // __TABLES__ is per-dataset, so for project scope we need to list datasets first.
-      let allRows: Record<string, unknown>[][] = [];
+      let allRows: unknown[][] = [];
       if (dataset) {
         const sql = `SELECT table_id, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, row_count, '${dataset}' AS dataset_id FROM \`${project}.${dataset}.__TABLES__\` ORDER BY last_modified_time ASC`;
         const exec = await executeQuery(sql, project);
