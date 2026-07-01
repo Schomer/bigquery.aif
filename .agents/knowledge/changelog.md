@@ -4,6 +4,22 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Orbiting stars and particles on signed-out page
+
+**What changed**:
+- Added three concentric orbit rings around the crystal ball on the signed-out page
+- Ring 1 (240px, 18s) has 3 twinkling 4-point stars
+- Ring 2 (360px, 28s, reverse) has 1 star and 3 glowing dot particles
+- Ring 3 (520px, 40s) has 2 stars and 3 particles
+- Stars use clip-path for a 4-point sparkle shape, particles are soft glowing circles
+- Each element twinkles/pulses at staggered delays for a layered feel
+
+**Files modified**:
+- `src/components/shell/SignedOutPage.tsx` -- wrapped icon-ring in orbit-container, added orbit ring divs with star/particle children
+- `src/app/globals.css` -- added `.so-orbit-container`, `.so-orbit-*`, `.so-star-*`, `.so-particle-*` styles and `so-spin`, `so-twinkle`, `so-pulse` keyframes
+
+---
+
 ## 2026-07-01: Project selection CTA with Firestore-backed favorites
 
 **What changed**:

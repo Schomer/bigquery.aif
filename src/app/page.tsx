@@ -1074,7 +1074,7 @@ export default function Home() {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 16,
+                    gap: 24,
                   }}>
                     <p style={{
                       color: 'var(--text-muted)',
@@ -1159,9 +1159,9 @@ export default function Home() {
 
                 {/* Recently-used datasets / tables */}
                 {activeProject && recentItems.length > 0 && (
-                  <div className="recent-items-section" style={{ marginTop: 24 }}>
-                    <div className="recent-items-label">Recent</div>
-                    <div className="recent-items">
+                  <div className="recent-items-section" style={{ marginTop: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div className="recent-items-label" style={{ textAlign: 'center' }}>Recent</div>
+                    <div className="recent-items" style={{ justifyContent: 'center' }}>
                       {recentItems.map((item, idx) => (
                         <button
                           key={`${item.type}-${item.name}-${idx}`}
@@ -1199,6 +1199,7 @@ export default function Home() {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: contextItems.length > 0 ? 6 : 0,
+                  ...(activeProject ? { background: '#fff', backgroundImage: 'none' } : {}),
                 }}>
                   {contextChipsRow}
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
@@ -1382,6 +1383,7 @@ export default function Home() {
               gap: contextItems.length > 0 ? 6 : 0,
               backdropFilter: 'blur(12px)',
               zIndex: 50,
+              ...(activeProject ? { background: '#fff', backgroundImage: 'none' } : {}),
             }}>
               {contextChipsRow}
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
@@ -1590,6 +1592,7 @@ export default function Home() {
                 display: contextItems.length > 0 ? 'flex' : undefined,
                 flexDirection: contextItems.length > 0 ? 'column' as const : undefined,
                 gap: contextItems.length > 0 ? 6 : undefined,
+                ...(activeProject ? { background: '#fff', backgroundImage: 'none' } : {}),
               }}>
                 {contextChipsRow}
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, width: '100%' }}>
@@ -1617,7 +1620,7 @@ export default function Home() {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 16,
+                    gap: 24,
                   }}>
                     <p style={{
                       color: 'var(--text-muted)',
@@ -1700,9 +1703,9 @@ export default function Home() {
                   </div>
                 )}
                 {activeProject && recentItems.length > 0 && (
-                  <div className="recent-items-section" style={{ maxWidth: 480 }}>
-                    <div className="recent-items-label">Recent</div>
-                    <div className="recent-items">
+                  <div className="recent-items-section" style={{ maxWidth: 480, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div className="recent-items-label" style={{ textAlign: 'center' }}>Recent</div>
+                    <div className="recent-items" style={{ justifyContent: 'center' }}>
                       {recentItems.map((item, idx) => (
                         <button
                           key={`${item.type}-${item.name}-${idx}`}
