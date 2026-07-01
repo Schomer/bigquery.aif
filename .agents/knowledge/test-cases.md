@@ -151,3 +151,31 @@ These test the schema skill's behavior.
 ### I2: Data quality to data management handoff
 1. "Check for duplicates in orders" -> data-quality, DUPLICATES
 2. "Remove those" -> data-management, DEDUPE (via context boost)
+
+---
+
+## Task Routing Tests
+
+### T1: SQL translation routes to task
+- **Input**: "i want to batch translate some sql files into google sql"
+- **Expected skill**: task
+- **Expected output**: TaskWorkflowView with dialect selector + SQL input
+- **Failure looks like**: Routes to query, produces empty response or hallucinated migration service message
+
+### T2: Translate column still routes to query
+- **Input**: "translate the description column"
+- **Expected skill**: query
+- **Expected output**: SQL using AI.GENERATE for column translation
+- **Failure looks like**: Routes to task (SQL migration workflow)
+
+### T3: Data transfer setup routes to task
+- **Input**: "help me set up a data transfer from S3"
+- **Expected skill**: task
+- **Expected output**: TaskWorkflowView with Data Transfer Service plan
+- **Failure looks like**: Routes to data-loading or query
+
+### T4: Guided workflow routes to task
+- **Input**: "guide me through connecting BigQuery to my Cloud SQL database"
+- **Expected skill**: task
+- **Expected output**: TaskWorkflowView with Connection API plan
+- **Failure looks like**: Routes to query or returns generic text response
