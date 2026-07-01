@@ -169,6 +169,25 @@ export default function Home() {
 
 
   useEffect(() => {
+    if (messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last.role === 'assistant') {
+      // Scroll so the assistant result is visible from its top
+      const scrollContainer = bottomRef.current?.parentElement;
+      if (scrollContainer) {
+        const lastMsgEl = scrollContainer.querySelector(
+          `[data-msg-idx="${messages.length - 1}"]`
+        ) as HTMLElement | null;
+        if (lastMsgEl) {
+          // Use requestAnimationFrame to let the DOM render the new content first
+          requestAnimationFrame(() => {
+            lastMsgEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+          return;
+        }
+      }
+    }
+    // For user messages or fallback, scroll to bottom (shows loading spinner)
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
@@ -497,7 +516,8 @@ export default function Home() {
       }
     }
 
-    if (ds) {
+    // Only show dataset chip when there's no table (table implies its dataset)
+    if (ds && !tbl) {
       items.push({
         id: `ds_${env.id}`,
         type: 'dataset',
@@ -556,7 +576,7 @@ export default function Home() {
     const resItem = contextItems.find((i) => i.type === 'result');
     return {
       ...context,
-      dataset: dsItem?.dataset ?? context.dataset,
+      dataset: dsItem?.dataset ?? tblItem?.dataset ?? context.dataset,
       lastTable: tblItem?.table ?? context.lastTable,
       lastSkill: resItem?.skill ?? context.lastSkill,
       lastResultRef: resItem?.resultRef ?? context.lastResultRef,
@@ -1077,7 +1097,7 @@ export default function Home() {
               gap: '24px',
             }}>
               {messages.map((msg, i) => (
-                <div key={i} className={i > 0 ? 'fade-up' : ''}>
+                <div key={i} data-msg-idx={i} className={i > 0 ? 'fade-up' : ''}>
                   {msg.role === 'user' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginBottom: 4 }}>
                       {editingIdx === i ? (
@@ -1265,7 +1285,7 @@ export default function Home() {
                 </div>
               )}
               {messages.map((msg, i) => (
-                <div key={i}>
+                <div key={i} data-msg-idx={i}>
                   {msg.role === 'user' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                       <div className="chat-sidebar-user-msg">
