@@ -103,7 +103,11 @@ export interface CompositionEnvelope {
   requiresConfirmation?: boolean;
   skipSelfReview?: boolean;
   insight?: string | null;
+  qualityFlags?: import('./result-quality').QualityFlag[];
 }
+
+// Re-export QualityFlag from result-quality module for convenience
+export type { QualityFlag } from './result-quality';
 
 // ─── Schema normalized result (bigquery-skill-schema.md §5) ──────────────────
 

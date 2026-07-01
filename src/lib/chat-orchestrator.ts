@@ -7,6 +7,8 @@ import { fetchSchema } from './skills/schema';
 import { compose } from './composer';
 import { dryRun, executeQuery, executeDml, exportToSheets, createScheduledQuery, detectBqRegion } from './bigquery-client';
 import { saveQuery as firestoreSaveQuery, saveCheck } from './firestore-service';
+import { findReusablePlan, cachePlan } from './plan-cache';
+import { analyzeResultQuality } from './result-quality';
 import type {
   ChatMessage,
   CompositionEnvelope,
@@ -421,10 +423,12 @@ export class ChatOrchestrator {
     // Try keyword-based classification first to avoid an unnecessary Gemini
     // round-trip for obvious requests (e.g., "list my datasets").
     let skill = context?.forcedSkill;
+    let routerConfidence: 'high' | 'medium' | 'low' = 'medium';
     if (!skill) {
       const keywordResult = classifyIntent(resolvedMessage, context);
       if (keywordResult.confidence === 'high') {
         skill = keywordResult.skill;
+        routerConfidence = 'high';
         // Still need available datasets for downstream handlers
         if (!availableDatasets) {
           const available = await getAvailableDatasets(project);
@@ -433,6 +437,7 @@ export class ChatOrchestrator {
         }
       } else {
         // Low/medium confidence or ambiguous: fall back to LLM intent classifier
+        routerConfidence = keywordResult.confidence;
         if (keywordResult.ambiguousReadWrite) {
           onStatus?.('Analyzing intent (ambiguous read/write signals detected)...');
         }
@@ -560,9 +565,45 @@ Available datasets: ${available.join(', ')}`;
     }
 
     // ── Self-review: run for skills that benefit from it ─────────────────────
-    // Skip review for fast-path metadata results (simple INFORMATION_SCHEMA
-    // queries with canned SQL) since the output is straightforward tabular data.
+    // Skip review for straightforward results where the Gemini review pass
+    // rarely changes anything meaningful. This saves 1-3s of latency.
+    //
+    // Skip conditions (any envelope matching these is marked skipSelfReview):
+    // 1. Schema results at PROJECT or DATASET scope (canned INFORMATION_SCHEMA)
+    // 2. KPI_CARD results (single-value answers where headline IS the answer)
+    // 3. High-confidence keyword match + clean execution + small result set
     if (envelopes.length > 0) {
+      for (const env of envelopes) {
+        if (env.requiresConfirmation || env.skipSelfReview) continue;
+
+        const artifactType = env.primaryArtifact.type;
+        const data = env.primaryArtifact.data as Record<string, unknown> | null;
+
+        // Schema PROJECT/DATASET scope: straightforward metadata listings
+        if (artifactType === 'SCHEMA_VIEW' && data && 'scope' in data) {
+          const scope = (data as { scope: string }).scope;
+          if (scope === 'PROJECT' || scope === 'DATASET') {
+            env.skipSelfReview = true;
+            continue;
+          }
+        }
+
+        // KPI_CARD: single value answers, headline is the answer
+        if (artifactType === 'KPI_CARD') {
+          env.skipSelfReview = true;
+          continue;
+        }
+
+        // High-confidence + small result: review adds little value
+        if (routerConfidence === 'high' && data && 'rows' in data) {
+          const rows = (data as { rows: unknown[] }).rows;
+          if (Array.isArray(rows) && rows.length < 100) {
+            env.skipSelfReview = true;
+            continue;
+          }
+        }
+      }
+
       const needsReview = envelopes.some((env) =>
         !env.requiresConfirmation && !env.skipSelfReview
       );

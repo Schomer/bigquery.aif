@@ -31,19 +31,21 @@ import type {
   ArtifactType,
   HandoffEnvelope,
   SkillName,
+  QualityFlag,
 } from './types';
 
 // ─── Main compose function ────────────────────────────────────────────────────
 
 export function compose(
   skill: SkillName,
-  result: SchemaResult | QueryResult | DataManagementResult | MonitoringResult | AlertResult | DiscoveryResult | DataQualityResult | DataLoadingResult | StorageBreakdownResult | AccessPatternResult | CostAnalysisResult | FreshnessResult
+  result: SchemaResult | QueryResult | DataManagementResult | MonitoringResult | AlertResult | DiscoveryResult | DataQualityResult | DataLoadingResult | StorageBreakdownResult | AccessPatternResult | CostAnalysisResult | FreshnessResult,
+  qualityFlags?: QualityFlag[],
 ): CompositionEnvelope {
   switch (skill) {
     case 'schema':
       return composeSchema(result as SchemaResult);
     case 'query':
-      return composeQuery(result as QueryResult);
+      return composeQuery(result as QueryResult, qualityFlags);
     case 'data-management':
       return composeDataManagement(result as DataManagementResult);
     case 'monitoring': {
@@ -155,7 +157,7 @@ function composeSchema(result: SchemaResult): CompositionEnvelope {
 
 // ─── Query composition ────────────────────────────────────────────────────────
 
-function composeQuery(result: QueryResult): CompositionEnvelope {
+function composeQuery(result: QueryResult, qualityFlags?: QualityFlag[]): CompositionEnvelope {
   const id = randomUUID();
 
   // Cost confirm card — don't show results
@@ -223,6 +225,22 @@ function composeQuery(result: QueryResult): CompositionEnvelope {
     });
   }
 
+  // Convert quality flag suggested actions into next-action chips
+  // (respecting the 4-chip cap from invariants)
+  if (qualityFlags) {
+    for (const flag of qualityFlags) {
+      if (flag.suggestedAction && nextActions.length < 4) {
+        nextActions.push({
+          targetSkill: flag.suggestedAction.skill,
+          label: flag.suggestedAction.label,
+          context: flag.suggestedAction.context,
+          sourceSkill: 'query',
+          sourceResultRef: id,
+        });
+      }
+    }
+  }
+
   return {
     id,
     skill: 'query',
@@ -247,6 +265,7 @@ function composeQuery(result: QueryResult): CompositionEnvelope {
     },
     nextActions,
     insight,
+    qualityFlags: qualityFlags && qualityFlags.length > 0 ? qualityFlags : undefined,
   };
 }
 

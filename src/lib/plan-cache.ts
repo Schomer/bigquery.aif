@@ -44,7 +44,7 @@ function extractTablesFromSql(sql: string): string[] {
 /** Classify the operation shape from SQL keywords. */
 function classifyShape(sql: string): string {
   const upper = sql.toUpperCase();
-  if (/\bORDER\s+BY\b.*\bLIMIT\b/s.test(upper)) return 'top-n';
+  if (/\bORDER\s+BY\b[\s\S]*\bLIMIT\b/.test(upper)) return 'top-n';
   if (/\bDATE_TRUNC\b|\bTIMESTAMP_TRUNC\b/i.test(upper) && /\bGROUP\s+BY\b/i.test(upper)) return 'time-series';
   if (/\bGROUP\s+BY\b/i.test(upper)) return 'aggregation';
   if (/\bWHERE\b/i.test(upper) && !/\bGROUP\s+BY\b/i.test(upper)) return 'filter';
