@@ -77,7 +77,7 @@ function CrystalBallThinking() {
 }
 
 export default function Home() {
-  const { activeProject, user } = useAuth();
+  const { activeProject, user, signIn } = useAuth();
   const { conversationId, newConversation } = useConversation();
   const { activePage, setActivePage } = usePage();
   const { layout } = useLayout();
@@ -400,7 +400,7 @@ export default function Home() {
         errorText = msg.replace('BigQuery query failed: ', '');
       }
 
-      const retryFn = () => sendMessage(text);
+      const retryFn = errorType === 'auth' ? signIn : () => sendMessage(text);
       setLastError({ message: errorText, type: errorType, retryFn });
 
       setMessages((prev) => [
@@ -918,7 +918,7 @@ export default function Home() {
                 cursor: 'pointer',
               }}
             >
-              Try again
+              {lastError.type === 'auth' ? 'Sign in again' : 'Try again'}
             </button>
           )}
         </div>
