@@ -467,18 +467,30 @@ export default function Home() {
   function extractContextItems(env: CompositionEnvelope): ContextItem[] {
     const items: ContextItem[] = [];
     const data = env.primaryArtifact.data as Record<string, unknown> | null;
-    if (!data) return items;
+    if (!data) {
+      // Fallback: use headline as a generic context chip
+      items.push({
+        id: `env_${env.id}`,
+        type: 'result',
+        label: env.headline.text,
+        icon: 'chat',
+        skill: env.skill,
+        resultRef: env.id,
+      });
+      return items;
+    }
 
     let ds: string | undefined;
     let tbl: string | undefined;
+    const sql = (data.sql as string | undefined) || env.provenance.sql;
 
     // Schema results
     if (data.dataset && typeof data.dataset === 'string') ds = data.dataset;
     if (data.table && typeof data.table === 'string') tbl = data.table;
 
     // Query results -- extract from SQL
-    if (data.sql && typeof data.sql === 'string') {
-      const sqlMatch = (data.sql as string).match(/\bFROM\s+`?([A-Za-z0-9_.-]+)`?/i);
+    if (sql) {
+      const sqlMatch = sql.match(/\bFROM\s+`?([A-Za-z0-9_.-]+)`?/i);
       if (sqlMatch) {
         const parts = sqlMatch[1].split('.');
         if (parts.length >= 3 && !ds) ds = parts[parts.length - 2];
@@ -529,7 +541,19 @@ export default function Home() {
         table: tbl,
         skill: env.skill,
         resultRef: env.id,
-        sql: data.sql as string | undefined,
+        sql: sql,
+      });
+    }
+
+    // Fallback: if nothing was extracted, use the headline
+    if (items.length === 0) {
+      items.push({
+        id: `env_${env.id}`,
+        type: 'result',
+        label: env.headline.text,
+        icon: 'chat',
+        skill: env.skill,
+        resultRef: env.id,
       });
     }
 
@@ -542,7 +566,6 @@ export default function Home() {
 
   function pinEnvelopeContext(env: CompositionEnvelope) {
     const items = extractContextItems(env);
-    if (items.length === 0) return;
     setContextItems(items);
     setPinnedEnvelopeId(env.id);
     inputRef.current?.focus();
