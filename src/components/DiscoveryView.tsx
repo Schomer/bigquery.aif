@@ -99,8 +99,8 @@ function SearchResultRow({ item, onSendMessage }: { item: DiscoverySearchResult;
         alignItems: 'flex-start',
         gap: 10,
         padding: '8px 12px',
-        background: hovered ? 'var(--accent-dim)' : 'rgba(128, 128, 128, 0.06)',
-        borderRadius: 6,
+        background: hovered ? 'var(--accent-dim)' : '#F5FBFF',
+        borderRadius: 10,
         border: 'none',
         cursor: 'pointer',
         transition: 'background 0.12s',
@@ -133,7 +133,6 @@ function SearchResultRow({ item, onSendMessage }: { item: DiscoverySearchResult;
           )}
         </div>
       </div>
-      <span style={{ fontSize: 12, color: 'var(--text-dim)', flexShrink: 0, marginTop: 2 }}>→</span>
     </div>
   );
 }

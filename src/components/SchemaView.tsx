@@ -40,7 +40,6 @@ export function SchemaView({ result, onSendMessage }: Props) {
               )}
             </div>
             <TypePill label="Dataset" />
-            <ArrowIcon />
           </ClickableRow>
         ))}
         <ListAnimationStyle />
@@ -78,7 +77,6 @@ export function SchemaView({ result, onSendMessage }: Props) {
                 )}
               </div>
               <TypePill label={badge.label} color={badge.color} />
-              <ArrowIcon />
             </ClickableRow>
           );
         })}
@@ -1519,8 +1517,8 @@ function ClickableRow({
         alignItems: 'center',
         gap: 7,
         padding: '6px 8px',
-        background: hovered ? 'var(--accent-dim)' : 'rgba(128, 128, 128, 0.06)',
-        borderRadius: 6,
+        background: hovered ? 'var(--accent-dim)' : '#F5FBFF',
+        borderRadius: 10,
         border: 'none',
         cursor: 'pointer',
         transition: 'background 0.12s ease',

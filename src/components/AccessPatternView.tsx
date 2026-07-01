@@ -402,8 +402,8 @@ function TopTableRow({
         gap: 12,
         padding: '8px 12px',
         cursor: 'pointer',
-        background: hovered ? 'var(--accent-dim)' : 'rgba(128, 128, 128, 0.06)',
-        borderRadius: 6,
+        background: hovered ? 'var(--accent-dim)' : '#F5FBFF',
+        borderRadius: 10,
         transition: 'background 0.12s',
       }}
     >
