@@ -91,7 +91,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
               title={isPinned ? 'Using as context' : 'Use as context'}
               style={{ flexShrink: 0, marginTop: 1 }}
             >
-              <span className="material-symbols-outlined">chat</span>
+              <span className="material-symbols-outlined">generate_slides</span>
             </button>
           )}
         </div>
