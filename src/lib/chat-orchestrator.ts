@@ -2188,8 +2188,8 @@ async function handleMonitoring(
   if (monitoringType === 'FRESHNESS') {
     const dataset = (hc?.dataset as string) || '';
     const freshnessSql = dataset
-      ? `SELECT table_schema, table_name, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, total_rows FROM \`${project}.${dataset}\`.INFORMATION_SCHEMA.TABLES ORDER BY last_modified_time ASC LIMIT 100`
-      : `SELECT table_schema, table_name, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, total_rows FROM \`${project}\`.\`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE ORDER BY last_modified_time ASC LIMIT 100`;
+      ? `SELECT table_schema, table_name, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, row_count AS total_rows FROM \`${project}.${dataset}\`.INFORMATION_SCHEMA.TABLES ORDER BY last_modified_time ASC LIMIT 100`
+      : `SELECT table_schema, table_name, TIMESTAMP_MILLIS(last_modified_time) AS last_modified, row_count AS total_rows FROM \`${project}\`.\`region-${region}\`.INFORMATION_SCHEMA.TABLES ORDER BY last_modified_time ASC LIMIT 100`;
     onStatus?.(`Checking data freshness${dataset ? ` for ${dataset}` : ''}...`);
     try {
       const executed = await executeQuery(freshnessSql, project);
