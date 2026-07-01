@@ -4,6 +4,18 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Fix session expired sign-in loop
+
+**What changed**:
+- "Session Expired" error banner now shows "Sign in again" button (was "Try again") that opens the Google sign-in popup to get a fresh OAuth token, instead of retrying the message with the expired token
+- `handleAuthError()` in `bigquery-client.ts` now clears the stale token from sessionStorage before redirecting, so the redirect lands on the sign-in page instead of the app with a broken token
+
+**Files modified**:
+- `src/app/page.tsx` -- pull `signIn` from useAuth, use it as retryFn for auth errors, change button label
+- `src/lib/bigquery-client.ts` -- clear sessionStorage before hard redirect
+
+---
+
 ## 2026-07-01: Auto-scroll shows result top instead of overshooting
 
 **What changed**:

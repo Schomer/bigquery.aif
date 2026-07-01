@@ -12,6 +12,14 @@ Every entry should answer: What changed? What worked? What broke? Why? What's th
 
 ---
 
+### 2026-07-01: Session expired "Try again" was looping instead of re-authenticating
+**Scope**: `src/app/page.tsx`, `src/lib/bigquery-client.ts`
+**What broke**: After the OAuth access token expired (~1 hour), the "Session Expired" banner appeared with a "Try again" button. Clicking it retried the same message with the same expired token, failing again immediately. Two separate issues:
+1. The `retryFn` for auth errors was `() => sendMessage(text)` -- it retried the message instead of calling `signIn()`.
+2. `handleAuthError()` in `bigquery-client.ts` did `window.location.href = '/'` without clearing the stale token from sessionStorage. The redirect landed back on the app (not the sign-in page) because `bqAuthorized` still evaluated to true.
+**Fix**: (1) Auth errors now set `retryFn = signIn` and the button label changes to "Sign in again". (2) `handleAuthError()` now clears `bqaif_access_token` from sessionStorage before redirecting.
+**Rule**: When an auth error occurs, the recovery action must obtain a new token, not retry with the old one. Any auth error handler that redirects must also clear cached credentials.
+
 ### 2026-07-01: Plan caching, conditional self-review, and result quality flags
 **Scope**: `src/lib/plan-cache.ts` [NEW], `src/lib/result-quality.ts` [NEW], `src/lib/chat-orchestrator.ts`, `src/lib/composer.ts`, `src/lib/types.ts`, `src/components/ArtifactCard.tsx`
 **What changed**: Three latency and quality improvements:
