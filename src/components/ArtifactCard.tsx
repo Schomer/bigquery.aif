@@ -20,7 +20,7 @@ import { StorageBreakdownView } from './StorageBreakdownView';
 import { AccessPatternView } from './AccessPatternView';
 import { CostAnalysisView } from './CostAnalysisView';
 import { FreshnessView } from './FreshnessView';
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
 interface Props {
   envelope: CompositionEnvelope;
@@ -29,6 +29,7 @@ interface Props {
   onChipClick?: (chip: HandoffEnvelope) => void;
   onInlineClick?: (message: string) => void;
   onPin?: (envelope: CompositionEnvelope) => void;
+  onRunSql?: (sql: string) => void;
   isPinned?: boolean;
 }
 
@@ -38,11 +39,24 @@ const TONE_CLASSES: Record<string, string> = {
   ATTENTION: 'tone-attention',
 };
 
-export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInlineClick, onPin, isPinned }: Props) {
+export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInlineClick, onPin, onRunSql, isPinned }: Props) {
 
   const toneClass = TONE_CLASSES[envelope.headline.tone] ?? 'tone-neutral';
   const [dismissedFlags, setDismissedFlags] = useState<Set<number>>(new Set());
   const [sqlOpen, setSqlOpen] = useState(false);
+  const [sqlEditing, setSqlEditing] = useState(false);
+  const [editedSql, setEditedSql] = useState(envelope.provenance.sql ?? '');
+  const sqlTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-size the textarea to fit content
+  const autoSizeTextarea = useCallback(() => {
+    const ta = sqlTextareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 300) + 'px';
+  }, []);
+
+  const sqlIsModified = editedSql !== (envelope.provenance.sql ?? '');
 
   // Convert chip click -> send the chip's label as a message (primary path)
   // The label is meaningful natural language, e.g. "Inspect orders", "Show sample rows"
@@ -277,7 +291,72 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
               </div>
               {hasSql && sqlOpen && (
                 <div style={{ paddingTop: 6 }}>
-                  <div className="sql-block">{envelope.provenance.sql}</div>
+                  {sqlEditing ? (
+                    <textarea
+                      ref={sqlTextareaRef}
+                      className="sql-block-editor"
+                      value={editedSql}
+                      onChange={(e) => {
+                        setEditedSql(e.target.value);
+                        autoSizeTextarea();
+                      }}
+                      spellCheck={false}
+                    />
+                  ) : (
+                    <div className="sql-block">{sqlIsModified ? editedSql : envelope.provenance.sql}</div>
+                  )}
+                  <div className="sql-action-bar">
+                    {!sqlEditing && (
+                      <button
+                        type="button"
+                        className="sql-action-btn"
+                        onClick={() => {
+                          setSqlEditing(true);
+                          // Auto-size after render
+                          setTimeout(() => autoSizeTextarea(), 0);
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>edit</span>
+                        Edit
+                      </button>
+                    )}
+                    {sqlEditing && (
+                      <button
+                        type="button"
+                        className="sql-action-btn"
+                        onClick={() => setSqlEditing(false)}
+                      >
+                        Done
+                      </button>
+                    )}
+                    {sqlIsModified && (
+                      <>
+                        {onRunSql && (
+                          <button
+                            type="button"
+                            className="sql-run-btn"
+                            onClick={() => {
+                              setSqlEditing(false);
+                              onRunSql(editedSql);
+                            }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>play_arrow</span>
+                            Run
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="sql-action-btn"
+                          onClick={() => {
+                            setEditedSql(envelope.provenance.sql ?? '');
+                            setSqlEditing(false);
+                          }}
+                        >
+                          Reset
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </>

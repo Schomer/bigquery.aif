@@ -671,6 +671,17 @@ export default function Home() {
     sendMessage(message);
   }
 
+  function handleRunSql(sql: string) {
+    // Synthesize a chip click that forces the query skill with explicit SQL
+    const chip: HandoffEnvelope = {
+      label: 'Run edited SQL',
+      targetSkill: 'query' as SkillName,
+      sourceSkill: 'user',
+      context: { sql },
+    };
+    handleChipClick(chip);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -1201,6 +1212,7 @@ export default function Home() {
                           onCancel={() => handleCancel(env)}
                           onChipClick={handleChipClick}
                           onInlineClick={handleInlineClick}
+                          onRunSql={handleRunSql}
                           onPin={extractContextItems(env).length > 0 ? pinEnvelopeContext : undefined}
                           isPinned={pinnedEnvelopeId === env.id}
                         />
@@ -1542,6 +1554,7 @@ export default function Home() {
                       onCancel={() => handleCancel(env)}
                       onChipClick={handleChipClick}
                       onInlineClick={handleInlineClick}
+                      onRunSql={handleRunSql}
                       onPin={extractContextItems(env).length > 0 ? pinEnvelopeContext : undefined}
                       isPinned={pinnedEnvelopeId === env.id}
                     />

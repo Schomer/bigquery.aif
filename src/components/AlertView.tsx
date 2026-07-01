@@ -101,6 +101,9 @@ export default function AlertView({ data, onAction }: AlertViewProps) {
               fontFamily: 'var(--font-mono)',
               lineHeight: 1.5,
               overflow: 'auto',
+              maxHeight: 240,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
               margin: '8px 0 0',
             }}>
               {data.checkSql}
