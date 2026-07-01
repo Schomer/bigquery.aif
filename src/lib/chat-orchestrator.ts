@@ -689,7 +689,7 @@ function tryFastEnrichment(
       };
     }
     // "datasets with size" / "datasets sorted by size" / "largest datasets"
-    if (/\b(size|bytes|storage|largest|biggest|smallest)\b/i.test(lower)) {
+    if (/\b(sizes?|bytes|storage|largest|biggest|smallest)\b/i.test(lower)) {
       return {
         sql: `SELECT table_schema AS dataset_name, COUNT(*) AS table_count, SUM(total_logical_bytes) AS total_size_bytes, SUM(total_rows) AS total_rows FROM \`${project}\`.\`region-${region}\`.INFORMATION_SCHEMA.TABLE_STORAGE GROUP BY table_schema ORDER BY total_size_bytes DESC`,
         resultSummary: `Datasets in ${project} with size and row counts`,
@@ -921,24 +921,29 @@ async function handleSchema(
     }
 
     // Slow path: ask Gemini to generate the SQL for complex enrichment requests
-    onStatus?.(`Building enriched query for dataset ${resolvedDataset}...`);
+    onStatus?.(`Building enriched query for ${resolvedDataset ? `dataset ${resolvedDataset}` : `project ${project}`}...`);
 
-    const dsRef = `\`${project}.${resolvedDataset}\``;
+    const isProjectScope = !resolvedDataset;
+    const dsRef = isProjectScope
+      ? `\`${project}\`.\`region-${region}\``
+      : `\`${project}.${resolvedDataset}\``;
+    const scopeLabel = isProjectScope ? `project \`${project}\`` : `dataset \`${resolvedDataset}\``;
 
     const enrichPrompt = `Generate a BigQuery INFORMATION_SCHEMA SQL query that fulfills the user's request.
 
-The user is requesting a DATASET-level listing within dataset \`${resolvedDataset}\` with additional requirements.
+The user is requesting a listing within ${scopeLabel} with additional requirements.
 
 Project: ${project}
-Dataset: ${resolvedDataset}
+${resolvedDataset ? `Dataset: ${resolvedDataset}` : `Scope: project-wide (all datasets)`}
 
 INFORMATION_SCHEMA reference:
-- Dataset-level tables: SELECT * FROM ${dsRef}.INFORMATION_SCHEMA.TABLES
-- Dataset-level storage: SELECT table_name, total_rows, total_logical_bytes FROM ${dsRef}.INFORMATION_SCHEMA.TABLE_STORAGE
-- Dataset-level columns: SELECT table_name, column_name, data_type, is_nullable FROM ${dsRef}.INFORMATION_SCHEMA.COLUMNS
+- Tables: SELECT * FROM ${dsRef}.INFORMATION_SCHEMA.TABLES
+- Storage: SELECT table_name, total_rows, total_logical_bytes FROM ${dsRef}.INFORMATION_SCHEMA.TABLE_STORAGE
+- Columns: SELECT table_name, column_name, data_type, is_nullable FROM ${dsRef}.INFORMATION_SCHEMA.COLUMNS
+${isProjectScope ? `- For project-scope, use table_schema column to identify datasets.` : ''}
 
 Rules:
-- The FIRST column MUST be the primary entity identifier: alias as 'table_name'.
+- The FIRST column MUST be the primary entity identifier: alias as '${isProjectScope ? 'dataset_name' : 'table_name'}'.
 - Use descriptive aliases for all other columns (e.g., 'table_count', 'total_size_bytes', 'row_count', 'last_modified').
 - Always wrap identifiers containing hyphens in backticks.
 - Return valid GoogleSQL only.`;
@@ -950,7 +955,7 @@ Rules:
       project,
     });
 
-    onStatus?.(`Running enriched INFORMATION_SCHEMA query against ${resolvedDataset}...`);
+    onStatus?.(`Running enriched INFORMATION_SCHEMA query against ${resolvedDataset || project}...`);
     const executed = await executeQuery(plan.sql, project);
 
     const queryResult: QueryResult = {
