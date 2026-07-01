@@ -201,12 +201,13 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
           );
         })()}
 
-        {/* Footer meta: row count + cost on same line */}
+        {/* Footer meta: row count + cost + context action */}
         {(() => {
           const d = envelope.primaryArtifact.data as Record<string, unknown> | undefined;
           const rowCount = Array.isArray((d as { rows?: unknown })?.rows) ? (d as { rows: unknown[] }).rows.length : null;
           const cost = envelope.provenance.cost;
-          if (!rowCount && !cost && !envelope.provenance.jobId) return null;
+          const showPin = onPin && !envelope.requiresConfirmation && envelope.primaryArtifact.type !== 'COMPLETION_CARD' && envelope.primaryArtifact.type !== 'MULTISTEP_VIEW' && envelope.primaryArtifact.type !== 'COST_CONFIRM_CARD';
+          if (!rowCount && !cost && !envelope.provenance.jobId && !showPin) return null;
           return (
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16, alignItems: 'center' }}>
               {rowCount != null && <span>{rowCount} rows</span>}
@@ -236,7 +237,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
                   BigQuery
                 </a>
               )}
-              {onPin && !envelope.requiresConfirmation && envelope.primaryArtifact.type !== 'COMPLETION_CARD' && envelope.primaryArtifact.type !== 'MULTISTEP_VIEW' && envelope.primaryArtifact.type !== 'COST_CONFIRM_CARD' && (
+              {showPin && (
                 <button
                   className={`context-action-btn${isPinned ? ' is-active' : ''}`}
                   onClick={() => onPin(envelope)}
