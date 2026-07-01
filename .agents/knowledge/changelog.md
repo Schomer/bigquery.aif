@@ -4,6 +4,20 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Fix LLM hallucinating wrong table in SQL generation
+
+**What changed**:
+- `buildSchemaContext()` now accepts a `priorityTable` parameter that ensures the user's target table is always included in the first 5 schemas sent to the LLM (even if the dataset has many tables)
+- `handleQuery()` now extracts the target table from the user's message (by word-boundary matching against the dataset's actual table names) or from `context.lastTable`, then: (a) passes it to `buildSchemaContext` and (b) adds a CRITICAL instruction to the LLM system prompt naming the exact table to query
+- Same fix applied to `handleDataManagement()`
+
+**Files modified**:
+- `src/lib/chat-orchestrator.ts` -- `buildSchemaContext()` priority table logic, `handleQuery()` target table extraction and LLM prompt, `handleDataManagement()` same pattern
+
+**Root cause**: When a user asked to "filter the liquor_backup table," the LLM received schemas for only the first 5 tables alphabetically and no explicit instruction about which table to use. With the target table missing from the context, the LLM hallucinated a table from its training data (faa.airports).
+
+---
+
 ## 2026-07-01: Core task framework
 
 **What changed**:
