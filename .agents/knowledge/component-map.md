@@ -83,8 +83,8 @@ UI Components (src/components/)
 - Lines 1024-1064: `buildReviewSnapshot()` -- prepares data for review
 - Lines 1066-1197: `selfReviewEnvelope()` -- LLM review pass
 
-#### Query Handler (lines 1199-1373)
-- Lines 1201-1373: `handleQuery()` -- SQL generation, dry-run, execution, auto-retry
+#### Query Handler (lines ~1242-1441)
+- `handleQuery()` -- plan cache check, SQL generation, dry-run, execution, auto-retry, result quality analysis
 
 #### Data Management Handler (lines 1375-1600)
 - Lines 1377-1562: `handleDataManagement()` -- plan generation, safety net, confirmation flow
@@ -104,13 +104,33 @@ UI Components (src/components/)
 
 ---
 
-### `src/lib/composer.ts` (847 lines)
+### `src/lib/composer.ts` (~865 lines)
 **Responsibility**: Transforms skill results into CompositionEnvelopes.
 - Each skill has a dedicated `compose[Skill]` function
 - Determines headline text and tone
 - Selects artifact type
-- Generates next-action handoff chips
+- Generates next-action handoff chips (including from quality flag suggested actions)
 - Formats provenance metadata
+- Accepts optional `qualityFlags` parameter, attaches to envelope for query results
+
+---
+
+### `src/lib/plan-cache.ts` (174 lines)
+**Responsibility**: Session-scoped cache of recent query plans.
+- `findReusablePlan(message, dataset)` -- checks cache for reusable SQL template
+- `cachePlan(skill, dataset, sql, ...)` -- stores a new plan entry
+- `clearPlanCache()` -- clears on session reset
+- FIFO eviction at 20 entries
+- Parameter substitution handles date literals, LIMIT values
+
+---
+
+### `src/lib/result-quality.ts` (~200 lines)
+**Responsibility**: Heuristic data quality checks on query result sets. No model calls.
+- `analyzeResultQuality(columns, rows, sql)` -- main entry point
+- Checks: null rates >20%, categorical near-duplicates, zero-row results, single-value columns
+- Single-value check suppresses columns that appear in WHERE clauses
+- Returns `QualityFlag[]` (capped at 5)
 
 ---
 

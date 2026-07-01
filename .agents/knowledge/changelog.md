@@ -4,6 +4,28 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Plan caching, conditional self-review, and result quality flags
+
+**What changed**:
+- Added session-scoped query plan cache (`plan-cache.ts`) that reuses SQL templates on iterative queries
+- Made self-review Gemini call conditional -- skipped for schema listings, KPI cards, and high-confidence small results
+- Added heuristic result quality analysis (`result-quality.ts`) for null rates, categorical near-duplicates, zero rows, and single-value columns
+- Quality flags render as dismissible banners in `ArtifactCard.tsx` with amber/gray severity styling
+- Quality flag suggested actions convert to next-action chips via the composer
+- Single-value column detection suppresses WHERE-clause-filtered columns per user feedback
+
+**Files created**:
+- `src/lib/plan-cache.ts` -- session-scoped cache with parameter diffing and FIFO eviction
+- `src/lib/result-quality.ts` -- pure heuristic checks, no model calls
+
+**Files modified**:
+- `src/lib/chat-orchestrator.ts` -- plan cache integration in `handleQuery()`, `routerConfidence` tracking, conditional self-review gate
+- `src/lib/composer.ts` -- accepts and folds `qualityFlags` into envelopes, converts suggested actions to chips
+- `src/lib/types.ts` -- added `qualityFlags` to `CompositionEnvelope`, re-exported `QualityFlag` type
+- `src/components/ArtifactCard.tsx` -- dismissible quality flag banner rendering
+
+---
+
 ## 2026-07-01: Freshness monitoring project-vs-dataset fix
 
 **What changed**:
