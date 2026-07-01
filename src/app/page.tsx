@@ -467,18 +467,7 @@ export default function Home() {
   function extractContextItems(env: CompositionEnvelope): ContextItem[] {
     const items: ContextItem[] = [];
     const data = env.primaryArtifact.data as Record<string, unknown> | null;
-    if (!data) {
-      // Fallback: use headline as a generic context chip
-      items.push({
-        id: `env_${env.id}`,
-        type: 'result',
-        label: env.headline.text,
-        icon: 'chat',
-        skill: env.skill,
-        resultRef: env.id,
-      });
-      return items;
-    }
+    if (!data) return items;
 
     let ds: string | undefined;
     let tbl: string | undefined;
@@ -545,18 +534,6 @@ export default function Home() {
       });
     }
 
-    // Fallback: if nothing was extracted, use the headline
-    if (items.length === 0) {
-      items.push({
-        id: `env_${env.id}`,
-        type: 'result',
-        label: env.headline.text,
-        icon: 'chat',
-        skill: env.skill,
-        resultRef: env.id,
-      });
-    }
-
     return items;
   }
 
@@ -566,6 +543,7 @@ export default function Home() {
 
   function pinEnvelopeContext(env: CompositionEnvelope) {
     const items = extractContextItems(env);
+    if (items.length === 0) return;
     setContextItems(items);
     setPinnedEnvelopeId(env.id);
     inputRef.current?.focus();
@@ -1203,7 +1181,7 @@ export default function Home() {
                           onCancel={() => handleCancel(env)}
                           onChipClick={handleChipClick}
                           onInlineClick={handleInlineClick}
-                          onPin={pinEnvelopeContext}
+                          onPin={extractContextItems(env).length > 0 ? pinEnvelopeContext : undefined}
                           isPinned={pinnedEnvelopeId === env.id}
                         />
                       ))}
@@ -1544,7 +1522,7 @@ export default function Home() {
                       onCancel={() => handleCancel(env)}
                       onChipClick={handleChipClick}
                       onInlineClick={handleInlineClick}
-                      onPin={pinEnvelopeContext}
+                      onPin={extractContextItems(env).length > 0 ? pinEnvelopeContext : undefined}
                       isPinned={pinnedEnvelopeId === env.id}
                     />
                   </div>
