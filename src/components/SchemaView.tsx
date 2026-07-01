@@ -22,7 +22,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'PROJECT') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {result.columns.map((ds, i) => (
           <ClickableRow
             key={ds.name}
@@ -50,7 +50,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'DATASET') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {result.columns.map((t, i) => {
           const badge = TYPE_BADGE_MAP[t.type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: t.type ?? 'Unknown' };
           const meta: string[] = [];
@@ -1518,12 +1518,12 @@ function ClickableRow({
         display: 'flex',
         alignItems: 'center',
         gap: 7,
-        padding: '4px 8px',
-        background: hovered ? 'var(--accent-dim)' : 'var(--surface-2)',
+        padding: '6px 8px',
+        background: hovered ? 'var(--accent-dim)' : 'rgba(128, 128, 128, 0.06)',
         borderRadius: 6,
-        border: `1px solid ${hovered ? 'var(--accent)' : 'var(--border-subtle)'}`,
+        border: 'none',
         cursor: 'pointer',
-        transition: 'background 0.12s ease, border-color 0.12s ease',
+        transition: 'background 0.12s ease',
         userSelect: 'none',
         animationName: 'listRowSlideIn',
         animationDuration: '0.2s',

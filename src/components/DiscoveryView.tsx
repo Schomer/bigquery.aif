@@ -70,7 +70,7 @@ function SearchView({ result, onSendMessage }: { result: DiscoveryResult; onSend
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
       {result.results.map((r, i) => (
         <SearchResultRow key={i} item={r} onSendMessage={onSendMessage} />
       ))}
@@ -99,11 +99,11 @@ function SearchResultRow({ item, onSendMessage }: { item: DiscoverySearchResult;
         alignItems: 'flex-start',
         gap: 10,
         padding: '8px 12px',
-        background: hovered ? 'var(--accent-dim)' : 'var(--surface-2)',
+        background: hovered ? 'var(--accent-dim)' : 'rgba(128, 128, 128, 0.06)',
         borderRadius: 6,
-        border: `1px solid ${hovered ? 'var(--accent)' : 'var(--border-subtle)'}`,
+        border: 'none',
         cursor: 'pointer',
-        transition: 'all 0.12s',
+        transition: 'background 0.12s',
         userSelect: 'none',
       }}
     >
