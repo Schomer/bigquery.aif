@@ -42,6 +42,7 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
 
   const toneClass = TONE_CLASSES[envelope.headline.tone] ?? 'tone-neutral';
   const [dismissedFlags, setDismissedFlags] = useState<Set<number>>(new Set());
+  const [sqlOpen, setSqlOpen] = useState(false);
 
   // Convert chip click -> send the chip's label as a message (primary path)
   // The label is meaningful natural language, e.g. "Inspect orders", "Show sample rows"
@@ -212,71 +213,76 @@ export function ArtifactCard({ envelope, onConfirm, onCancel, onChipClick, onInl
           );
         })()}
 
-        {/* Footer meta: row count + cost */}
+        {/* Footer meta: row count + cost + SQL + BigQuery link */}
         {(() => {
           const d = envelope.primaryArtifact.data as Record<string, unknown> | undefined;
           const rowCount = Array.isArray((d as { rows?: unknown })?.rows) ? (d as { rows: unknown[] }).rows.length : null;
           const cost = envelope.provenance.cost;
-          if (!rowCount && !cost && !envelope.provenance.jobId) return null;
+          const hasSql = !!envelope.provenance.sql;
+          if (!rowCount && !cost && !envelope.provenance.jobId && !hasSql) return null;
           return (
-            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16, alignItems: 'center' }}>
-              {rowCount != null && <span>{rowCount} rows</span>}
-              {cost && (
-                <>
-                  <span>{formatBytes(cost.totalBytesProcessed)} processed</span>
-                  <span>Tier {cost.tier}</span>
-                  {envelope.provenance.freshness && <span>{envelope.provenance.freshness}</span>}
-                </>
+            <>
+              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16, alignItems: 'center' }}>
+                {rowCount != null && <span>{rowCount} rows</span>}
+                {cost && (
+                  <>
+                    <span>{formatBytes(cost.totalBytesProcessed)} processed</span>
+                    <span>Tier {cost.tier}</span>
+                    {envelope.provenance.freshness && <span>{envelope.provenance.freshness}</span>}
+                  </>
+                )}
+                {hasSql && (
+                  <button
+                    type="button"
+                    onClick={() => setSqlOpen(v => !v)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      margin: 0,
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontWeight: 500,
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <span className="provenance-arrow" style={{ transform: sqlOpen ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s' }}>&#9654;</span>
+                    SQL
+                  </button>
+                )}
+                {envelope.provenance.jobId && envelope.provenance.project && (
+                  <a
+                    href={`https://console.cloud.google.com/bigquery?project=${encodeURIComponent(envelope.provenance.project)}&j=bq:US:${encodeURIComponent(envelope.provenance.jobId)}&page=queryresults`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#4f7fff',
+                      textDecoration: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                      marginLeft: 'auto',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 13 }}>open_in_new</span>
+                    BigQuery
+                  </a>
+                )}
+              </div>
+              {hasSql && sqlOpen && (
+                <div style={{ paddingTop: 6 }}>
+                  <div className="sql-block">{envelope.provenance.sql}</div>
+                </div>
               )}
-              {envelope.provenance.jobId && envelope.provenance.project && (
-                <a
-                  href={`https://console.cloud.google.com/bigquery?project=${encodeURIComponent(envelope.provenance.project)}&j=bq:US:${encodeURIComponent(envelope.provenance.jobId)}&page=queryresults`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    color: '#4f7fff',
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 3,
-                    marginLeft: 'auto',
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 13 }}>open_in_new</span>
-                  BigQuery
-                </a>
-              )}
-            </div>
+            </>
           );
         })()}
-
-        {/* SQL toggle */}
-        {envelope.provenance.sql && (
-          <div style={{ marginTop: 6 }}>
-            <details style={{ margin: 0 }}>
-              <summary style={{
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                listStyle: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                userSelect: 'none',
-                padding: '3px 0',
-                fontWeight: 500,
-              }}>
-                <span className="provenance-arrow">&#9654;</span>
-                SQL
-              </summary>
-              <div style={{ paddingTop: 6 }}>
-                <div className="sql-block">{envelope.provenance.sql}</div>
-              </div>
-            </details>
-          </div>
-        )}
 
         {/* Divider before suggestions */}
         {!envelope.requiresConfirmation && (
