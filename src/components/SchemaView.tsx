@@ -22,7 +22,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'PROJECT') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {result.columns.map((ds, i) => (
           <ClickableRow
             key={ds.name}
@@ -31,14 +31,12 @@ export function SchemaView({ result, onSendMessage }: Props) {
             index={i}
           >
             <IconBadge icon="database" color="#6366f1" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', display: 'block' }}>{ds.name}</span>
-              {ds.tableCount != null && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 2, display: 'block' }}>
-                  {ds.tableCount} table{ds.tableCount !== 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ds.name}</span>
+            {ds.tableCount != null && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {ds.tableCount} table{ds.tableCount !== 1 ? 's' : ''}
+              </span>
+            )}
             <TypePill label="Dataset" />
           </ClickableRow>
         ))}
@@ -49,7 +47,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
 
   if (result.scope === 'DATASET') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {result.columns.map((t, i) => {
           const badge = TYPE_BADGE_MAP[t.type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: t.type ?? 'Unknown' };
           const meta: string[] = [];
@@ -57,7 +55,7 @@ export function SchemaView({ result, onSendMessage }: Props) {
           if (t.sizeBytes != null) meta.push(formatBytes(t.sizeBytes));
           if (t.creationTime) {
             try {
-              meta.push(`created ${new Date(t.creationTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`);
+              meta.push(new Date(t.creationTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }));
             } catch { /* skip bad date */ }
           }
           return (
@@ -68,14 +66,12 @@ export function SchemaView({ result, onSendMessage }: Props) {
               index={i}
             >
               <IconBadge icon={badge.icon} color={badge.color} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', display: 'block' }}>{t.name}</span>
-                {(t.description || meta.length > 0) && (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 2, display: 'block' }}>
-                    {t.description ? `${t.description} — ` : ''}{meta.join(' / ')}
-                  </span>
-                )}
-              </div>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+              {meta.length > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {meta.join(' · ')}
+                </span>
+              )}
               <TypePill label={badge.label} color={badge.color} />
             </ClickableRow>
           );

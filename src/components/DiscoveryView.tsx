@@ -70,7 +70,7 @@ function SearchView({ result, onSendMessage }: { result: DiscoveryResult; onSend
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       {result.results.map((r, i) => (
         <SearchResultRow key={i} item={r} onSendMessage={onSendMessage} />
       ))}
@@ -96,9 +96,9 @@ function SearchResultRow({ item, onSendMessage }: { item: DiscoverySearchResult;
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex',
-        alignItems: 'flex-start',
-        gap: 10,
-        padding: '8px 12px',
+        alignItems: 'center',
+        gap: 7,
+        padding: '6px 8px',
         background: hovered ? 'var(--accent-dim)' : '#F5FBFF',
         borderRadius: 10,
         border: 'none',
@@ -110,28 +110,26 @@ function SearchResultRow({ item, onSendMessage }: { item: DiscoverySearchResult;
       <span
         className="material-symbols-outlined"
         title={item.type}
-        style={{ fontSize: 15, color: 'var(--text-dim)', flexShrink: 0, marginTop: 1 }}
+        style={{ fontSize: 15, color: 'var(--text-dim)', flexShrink: 0 }}
       >
         {iconMap[item.type] ?? 'help_outline'}
       </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{
-          fontSize: 13,
-          color: hovered ? 'var(--accent)' : 'var(--text)',
-          wordBreak: 'break-all',
-          transition: 'color 0.12s',
-        }}>
-          {item.ref}
-        </span>
-        <div style={{ display: 'flex', gap: 12, marginTop: 3, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-            matched on <em>{item.matchedOn}</em>
-          </span>
-          {item.description && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.description}</span>
-          )}
-        </div>
-      </div>
+      <span style={{
+        fontSize: 12,
+        fontWeight: 500,
+        color: hovered ? 'var(--accent)' : 'var(--text)',
+        flex: 1,
+        minWidth: 0,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        transition: 'color 0.12s',
+      }}>
+        {item.ref}
+      </span>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {item.matchedOn}{item.description ? ` \u00b7 ${item.description}` : ''}
+      </span>
     </div>
   );
 }

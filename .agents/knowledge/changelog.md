@@ -4,6 +4,24 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: History toggle in top bar
+
+**Problem**: Users wanted a way to hide previous conversation output so the latest result sits at the top of the viewport, rather than scrolling past old exchanges.
+
+**What changed**:
+- Added `historyVisible` / `setHistoryVisible` to `layout-context.tsx`, persisted to localStorage
+- Added a `history` icon button to the right side of `TopBar.tsx` (before the layout switcher). When history is off, the icon gets a diagonal strikethrough overlay and reduced opacity
+- In `page.tsx`, computed `historyHiddenBefore` index: when history is off, everything before the last user message is hidden via `display: none`. Uses index-based hiding (not array slicing) so `editingIdx`, `submitEdit`, `thinkingSteps` etc. keep working
+- `allEnvelopes` in split layout also filters by the same threshold
+
+**Files modified**:
+- `src/lib/layout-context.tsx` -- added historyVisible state + localStorage persistence
+- `src/components/shell/TopBar.tsx` -- added toggle button
+- `src/app/page.tsx` -- added historyHiddenBefore, display:none on hidden messages, filtered allEnvelopes
+- `src/app/globals.css` -- added `.gc-history-toggle` / `.gc-history-toggle--off` styles
+
+---
+
 ## 2026-07-01: Auto-refresh expired OAuth token
 
 **Problem**: The Google OAuth access token expires after ~1 hour. Users see "Session Expired" mid-session and have to manually re-sign-in, losing their in-progress query.
