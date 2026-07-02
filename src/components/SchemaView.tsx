@@ -45,16 +45,15 @@ export function SchemaView({ result, onSendMessage }: Props) {
   }
 
   if (result.scope === 'DATASET') {
+    const metaStyle: React.CSSProperties = { fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0, minWidth: 90, textAlign: 'right' };
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {result.columns.map((t, i) => {
           const badge = TYPE_BADGE_MAP[t.type ?? ''] ?? { icon: 'help_outline', color: '#94a3b8', label: t.type ?? 'Unknown' };
-          const meta: string[] = [];
-          if (t.rowCount != null) meta.push(`${t.rowCount.toLocaleString()} rows`);
-          if (t.sizeBytes != null) meta.push(formatBytes(t.sizeBytes));
+          let createdStr: string | null = null;
           if (t.creationTime) {
             try {
-              meta.push(new Date(t.creationTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }));
+              createdStr = `Created ${new Date(t.creationTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`;
             } catch { /* skip bad date */ }
           }
           return (
@@ -66,10 +65,14 @@ export function SchemaView({ result, onSendMessage }: Props) {
             >
               <IconBadge icon={badge.icon} color={badge.color} />
               <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-              {meta.length > 0 && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  {meta.join(' · ')}
-                </span>
+              {t.rowCount != null && (
+                <span style={metaStyle}>{t.rowCount.toLocaleString()} rows</span>
+              )}
+              {t.sizeBytes != null && (
+                <span style={metaStyle}>{formatBytes(t.sizeBytes)}</span>
+              )}
+              {createdStr && (
+                <span style={{ ...metaStyle, minWidth: 130 }}>{createdStr}</span>
               )}
               <TypePill label={badge.label} color={badge.color} />
             </ClickableRow>
