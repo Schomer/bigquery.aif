@@ -31,7 +31,7 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Google Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Google Sans', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -354,7 +354,7 @@ details>summary::marker {
   display: flex;
   align-items: center;
   padding: 0 8px;
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 .gc-top-bar-start {
@@ -396,7 +396,7 @@ details>summary::marker {
 }
 
 .gc-logo-product {
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #202124;
@@ -404,7 +404,7 @@ details>summary::marker {
 }
 
 .gc-logo-text {
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-size: 15px;
   font-weight: 500;
   color: #1B2E5D;
@@ -435,7 +435,7 @@ details>summary::marker {
   cursor: pointer;
   white-space: nowrap;
   transition: box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 .gc-env-chip:hover {
@@ -470,7 +470,7 @@ details>summary::marker {
   width: 300px;
   z-index: 200;
   overflow: hidden;
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   display: flex;
   flex-direction: column;
 }
@@ -606,7 +606,7 @@ details>summary::marker {
   cursor: pointer;
   text-align: left;
   transition: background .12s;
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   min-width: 0;
 }
 
@@ -899,7 +899,7 @@ details>summary::marker {
   min-width: 260px;
   z-index: 200;
   overflow: hidden;
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 .gc-avatar-menu-info {
@@ -948,7 +948,7 @@ details>summary::marker {
   cursor: pointer;
   text-align: left;
   transition: background .12s;
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 .gc-avatar-menu-item:hover {
@@ -1027,7 +1027,7 @@ details>summary::marker {
   flex-direction: column;
   overflow: hidden;
   transition: width .2s ease;
-  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -1541,7 +1541,7 @@ details>summary::marker {
 
 /* Headline */
 .so-headline {
-  font-family: 'Google Sans', 'Inter', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-size: 40px;
   font-weight: 500;
   color: var(--text);
@@ -1555,7 +1555,7 @@ details>summary::marker {
   font-size: 16px;
   color: var(--text-muted);
   margin: 0 0 36px;
-  font-family: 'Google Sans', 'Inter', sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 /* Example prompt chips — light Material style */
@@ -1578,7 +1578,7 @@ details>summary::marker {
   color: var(--text-muted);
   font-size: 13px;
   text-align: left;
-  font-family: 'Google Sans', 'Inter', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   transition: border-color .15s, color .15s, background .15s;
   cursor: default;
 }
@@ -1608,7 +1608,7 @@ details>summary::marker {
   border-radius: 8px;
   font-size: 15px;
   font-weight: 500;
-  font-family: 'Google Sans', 'Inter', sans-serif;
+  font-family: 'Google Sans', sans-serif;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(60, 64, 67, .15), 0 2px 8px rgba(60, 64, 67, .08);
   transition: box-shadow .2s, transform .15s, background .15s;
@@ -1638,7 +1638,7 @@ details>summary::marker {
   margin-top: 16px;
   font-size: 12px;
   color: var(--text-dim);
-  font-family: 'Inter', sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 /* Signing-in spinner state */
@@ -1659,7 +1659,7 @@ details>summary::marker {
   margin: 0;
   font-size: 15px;
   color: var(--text-muted);
-  font-family: 'Google Sans', 'Inter', sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 /* Recharts interactive elements */

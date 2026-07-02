@@ -193,7 +193,7 @@ export function EmptyCanvasAnimation() {
           font-size: 13px;
           font-style: italic;
           color: var(--text-muted, #6b7280);
-          font-family: 'Google Sans', 'Inter', sans-serif;
+          font-family: 'Google Sans', sans-serif;
           letter-spacing: 0.02em;
           text-align: center;
           display: flex;

@@ -67,7 +67,7 @@ function CrystalBallThinking() {
         fontSize: 13,
         fontStyle: 'italic',
         color: 'var(--text-muted)',
-        fontFamily: "'Google Sans', 'Inter', sans-serif",
+        fontFamily: "'Google Sans', sans-serif",
         letterSpacing: '0.01em',
         transition: 'opacity 0.4s ease',
       }}>
@@ -1405,7 +1405,7 @@ export default function Home() {
                     fontSize: 13,
                     fontStyle: 'italic',
                     color: 'var(--text-muted)',
-                    fontFamily: "'Google Sans', 'Inter', sans-serif",
+                    fontFamily: "'Google Sans', sans-serif",
                     letterSpacing: '0.01em',
                     transition: 'opacity 0.4s ease',
                   }}>
@@ -1625,7 +1625,7 @@ export default function Home() {
                     fontSize: 12,
                     fontStyle: 'italic',
                     color: 'var(--text-muted)',
-                    fontFamily: "'Google Sans', 'Inter', sans-serif",
+                    fontFamily: "'Google Sans', sans-serif",
                   }}>
                     {statusText || 'Processing...'}
                   </span>

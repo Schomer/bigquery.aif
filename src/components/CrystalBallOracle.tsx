@@ -88,7 +88,7 @@ export function CrystalBallOracle({ ballSize = 88 }: { ballSize?: number }) {
           fontSize: 13,
           fontStyle: 'italic',
           color: 'var(--text-muted, #6b7280)',
-          fontFamily: "'Google Sans', 'Inter', sans-serif",
+          fontFamily: "'Google Sans', sans-serif",
           letterSpacing: '0.015em',
           textAlign: 'center',
           maxWidth: 280,
