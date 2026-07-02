@@ -37,7 +37,6 @@ export function SchemaView({ result, onSendMessage }: Props) {
                 {ds.tableCount} table{ds.tableCount !== 1 ? 's' : ''}
               </span>
             )}
-            <TypePill label="Dataset" />
           </ClickableRow>
         ))}
         <ListAnimationStyle />

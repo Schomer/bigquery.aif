@@ -117,6 +117,7 @@ These principles govern all design decisions. They are not suggestions -- they a
 
 - **`SchemaView.tsx` is the largest component (67KB)**: Changes here are high-risk. Test all three schema scopes (project/dataset/table) after any modification.
 - **Error boundaries wrap skill-specific views**: Each view component should gracefully handle missing or malformed data from the orchestrator.
+- **Google Sans is the only non-code font**: All UI text must use `'Google Sans', sans-serif`. Do not introduce Inter, Roboto, or other font families. Monospace (`var(--font-mono)`) is reserved for code blocks, SQL, and technical identifiers -- not table data cells.
 - **Confirmation cards block execution**: `ConfirmationCard` and `CostConfirmCard` must prevent any data-modifying operation until the user explicitly confirms.
 
 ---

@@ -4,6 +4,20 @@ A record of what changed in each coding session. Read this to understand recent 
 
 ---
 
+## 2026-07-01: Enforce Google Sans as sole non-code font
+
+**Problem**: Table data cells (sample rows, query results) used monospace (`var(--font-mono)`) for all content. Various CSS declarations used Inter or Roboto as fallbacks. User directive: only Google Sans for all UI text; monospace only for actual code.
+
+**What changed**:
+- SchemaView SampleTab: removed mono font from th/td elements; bumped cell font-size from 11 to 12
+- DataTable: removed conditional mono font from numeric cells
+- globals.css: body fallback simplified; all Roboto and Inter fallbacks removed
+- page.tsx, CrystalBallOracle.tsx, EmptyCanvasAnimation.tsx: removed Inter from inline styles
+
+**Files modified**: SchemaView.tsx, DataTable.tsx, globals.css, page.tsx, CrystalBallOracle.tsx, EmptyCanvasAnimation.tsx
+
+---
+
 ## 2026-07-01: Flatten dataset/table list rows to single-line layout
 
 **Problem**: List rows for datasets and tables used a two-line layout (name on top, details below). User wanted a more compact single-row format with name and metadata inline.
